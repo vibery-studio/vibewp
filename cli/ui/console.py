@@ -113,7 +113,8 @@ def confirm(message: str, default: bool = False) -> bool:
         True if confirmed, False otherwise
     """
     default_str = "Y/n" if default else "y/N"
-    response = console.input(f"[warning]{message}[/warning] [{default_str}]: ").strip().lower()
+    hint = "[dim](Type Y or N)[/dim] "
+    response = console.input(f"[warning]{message}[/warning] {hint}[{default_str}]: ").strip().lower()
 
     if not response:
         return default
