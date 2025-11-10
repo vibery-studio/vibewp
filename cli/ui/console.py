@@ -72,7 +72,7 @@ def create_table(
     Returns:
         Rich Table object
     """
-    table = Table(title=title, show_header=show_header, header_style="bold header")
+    table = Table(title=title, show_header=show_header, header_style="header")
 
     # Add columns
     for col_name, col_style in columns:

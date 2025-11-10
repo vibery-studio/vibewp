@@ -70,7 +70,7 @@ def create_site(
             site_name = typer.prompt("Site name (alphanumeric, underscores)")
 
         # Validate site name
-        if not site_name.replace('_', '').replace('-', '').isalnum():
+        if not site_name or not site_name.replace('_', '').replace('-', '').isalnum():
             print_error("Site name must be alphanumeric with underscores/hyphens")
             raise typer.Exit(code=1)
 
