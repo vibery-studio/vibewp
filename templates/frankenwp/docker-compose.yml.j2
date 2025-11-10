@@ -17,7 +17,6 @@ services:
     labels:
       caddy: {{ domain }}
       caddy.reverse_proxy: "{{ '{{upstreams}}' }}"
-      caddy.tls: "internal"
     depends_on:
       db:
         condition: service_healthy
