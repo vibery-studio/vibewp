@@ -129,9 +129,9 @@ def docker_stats():
 
 @app.command("logs")
 def view_logs(
-    lines: int = typer.Option(50, "--lines", "-n", help="Number of lines to show"),
-    filter_text: str = typer.Option(None, "--filter", "-f", help="Filter logs by text"),
-    service: str = typer.Option("syslog", "--service", "-s", help="Service to view logs for (syslog, docker, fail2ban)")
+    lines: int = typer.Option(50, "--lines", help="Number of lines to show"),
+    filter_text: str = typer.Option(None, "--filter", help="Filter logs by text"),
+    service: str = typer.Option("syslog", "--service", help="Service to view logs for (syslog, docker, fail2ban)")
 ):
     """View and filter system logs"""
     try:
@@ -331,7 +331,7 @@ def list_processes(
 
 @app.command("disk")
 def disk_usage(
-    all_filesystems: bool = typer.Option(False, "--all", "-a", help="Show all filesystems")
+    all_filesystems: bool = typer.Option(False, "--all", help="Show all filesystems")
 ):
     """Show disk usage for all mounted filesystems"""
     try:

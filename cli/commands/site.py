@@ -333,7 +333,7 @@ def site_info(site_name: str = typer.Argument(..., help="Site name")):
 @app.command("delete")
 def delete_site(
     site_name: str = typer.Argument(..., help="Site name"),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation")
+    force: bool = typer.Option(False, "--force", help="Skip confirmation")
 ):
     """Delete a WordPress site"""
     try:
@@ -412,9 +412,9 @@ def delete_site(
 @app.command("logs")
 def site_logs(
     site_name: str = typer.Argument(..., help="Site name"),
-    service: Optional[str] = typer.Option(None, "--service", "-s", help="Service name (wp, db, redis)"),
-    tail: int = typer.Option(100, "--tail", "-n", help="Number of lines to show"),
-    follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output")
+    service: Optional[str] = typer.Option(None, "--service", help="Service name (wp, db, redis)"),
+    tail: int = typer.Option(100, "--tail", help="Number of lines to show"),
+    follow: bool = typer.Option(False, "--follow", help="Follow log output")
 ):
     """View container logs for a site"""
     try:

@@ -55,7 +55,7 @@ def create_backup(
 
 @app.command("list")
 def list_backups(
-    site: str = typer.Option(None, "--site", "-s", help="Filter by site name")
+    site: str = typer.Option(None, "--site", help="Filter by site name")
 ):
     """List all available backups"""
     try:
@@ -179,7 +179,7 @@ def restore_backup(
 def download_backup(
     site_name: str = typer.Argument(..., help="Site name"),
     backup_id: str = typer.Argument(..., help="Backup ID"),
-    output_path: str = typer.Option("./", "--output", "-o", help="Local download path")
+    output_path: str = typer.Option("./", "--output", help="Local download path")
 ):
     """Download a backup to local machine"""
     import os
