@@ -66,10 +66,12 @@ def create_site(
         config_mgr.load_config()
 
         # Interactive prompts if not provided
-        if not site_name:
+        # Handle both None and OptionInfo objects from typer
+        if not site_name or not isinstance(site_name, str):
             site_name = typer.prompt("Site name (alphanumeric, underscores)")
 
-        # Validate site name
+        # Ensure site_name is a string and validate
+        site_name = str(site_name).strip()
         if not site_name or not site_name.replace('_', '').replace('-', '').isalnum():
             print_error("Site name must be alphanumeric with underscores/hyphens")
             raise typer.Exit(code=1)
@@ -79,25 +81,29 @@ def create_site(
             print_error(f"Site '{site_name}' already exists")
             raise typer.Exit(code=1)
 
-        if not domain:
+        if not domain or not isinstance(domain, str):
             domain = typer.prompt("Domain name")
+        domain = str(domain).strip()
 
-        if not wp_type:
+        if not wp_type or not isinstance(wp_type, str):
             console.print("\n[bold cyan]Choose WordPress Engine:[/bold cyan]")
             console.print("  [green]1. frankenwp[/green] - FrankenPHP (high performance, Go-based)")
             console.print("  [green]2. ols[/green] - OpenLiteSpeed (proven stability, LiteSpeed Cache)")
             wp_choice = typer.prompt("Select engine", type=int, default=1)
             wp_type = "frankenwp" if wp_choice == 1 else "ols"
 
+        wp_type = str(wp_type).strip().lower()
         if wp_type not in ["frankenwp", "ols"]:
             print_error("Invalid WordPress type. Choose 'frankenwp' or 'ols'")
             raise typer.Exit(code=1)
 
-        if not admin_email:
+        if not admin_email or not isinstance(admin_email, str):
             admin_email = typer.prompt("Admin email", default=config_mgr.wordpress.default_admin_email)
+        admin_email = str(admin_email).strip()
 
-        if not site_title:
+        if not site_title or not isinstance(site_title, str):
             site_title = typer.prompt("Site title", default=domain)
+        site_title = str(site_title).strip()
 
         # Display summary
         console.print("\n[bold cyan]Site Configuration:[/bold cyan]")
