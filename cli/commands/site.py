@@ -204,18 +204,9 @@ def create_site(
                 if not health_checker.wait_for_container(wp_container, timeout=60):
                     raise RuntimeError("WordPress container failed to start")
 
-                # Install WordPress
-                progress.update(task, description="Installing WordPress...")
-                wp_manager = WordPressManager(ssh_manager=ssh)
-
-                try:
-                    wp_manager.core_install(
-                        container_name=wp_container,
-                        site_config=creds,
-                        wp_type=wp_type
-                    )
-                except Exception as e:
-                    raise RuntimeError(f"WordPress installation failed: {e}")
+                # Note: WordPress auto-installs on first visit
+                # WP-CLI installation skipped (requires wordpress:cli image)
+                progress.update(task, description="WordPress containers ready...")
 
                 # Verify site accessibility
                 progress.update(task, description="Verifying site accessibility...")
@@ -243,13 +234,17 @@ def create_site(
                 f"[bold]Site Name:[/bold] {site_name}\n"
                 f"[bold]Domain:[/bold] {domain}\n"
                 f"[bold]Engine:[/bold] {wp_type}\n\n"
-                f"[bold cyan]Access URLs:[/bold cyan]\n"
-                f"  Site: {site_url}\n"
-                f"  Admin: {site_url}/wp-admin\n\n"
-                f"[bold cyan]Admin Credentials:[/bold cyan]\n"
-                f"  Username: {creds['wp_admin_user']}\n"
-                f"  Password: {creds['wp_admin_password']}\n\n"
-                f"[yellow]⚠ Save these credentials securely![/yellow]",
+                f"[bold cyan]Next Steps:[/bold cyan]\n"
+                f"1. Visit {site_url} to complete WordPress installation\n"
+                f"2. Use these database credentials during setup:\n"
+                f"   - Database: {creds['db_name']}\n"
+                f"   - Username: {creds['db_user']}\n"
+                f"   - Password: (auto-configured)\n"
+                f"   - Host: db\n\n"
+                f"[bold cyan]Admin Login:[/bold cyan]\n"
+                f"  URL: {site_url}/wp-admin\n"
+                f"  (Set during installation)\n\n"
+                f"[yellow]⚠ Complete installation within 5 minutes![/yellow]",
                 title="VibeWP Site Creation",
                 border_style="green"
             ))
