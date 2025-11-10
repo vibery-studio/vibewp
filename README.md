@@ -14,24 +14,43 @@ Complete CLI tool for managing WordPress sites on VPS with automatic HTTPS, Dock
 
 ## 🚀 Quick Start
 
+### Prerequisites
+
+1. **Fresh Ubuntu VPS** (22.04 or 24.04 LTS)
+2. **Docker installed**:
+   ```bash
+   curl -fsSL https://get.docker.com | sh
+   systemctl start docker && systemctl enable docker
+   ```
+3. **Domain DNS** pointed to your VPS IP
+
 ### One-Line Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vibery-studio/vibewp/main/install.sh | sudo bash
 ```
 
+**What this does automatically:**
+- ✅ Installs VibeWP CLI
+- ✅ Generates SSH keys for localhost access
+- ✅ Creates Docker proxy network
+- ✅ Deploys Caddy reverse proxy
+- ✅ Initializes configuration
+
 ### Create Your First Site
 
 ```bash
 vibewp site create
-# Follow interactive prompts
 ```
+
+**No additional configuration needed!** Just follow the interactive prompts.
 
 ## 📋 Requirements
 
 - **OS**: Ubuntu 22.04 or 24.04 LTS
 - **RAM**: 2GB minimum
 - **CPU**: 2 cores recommended
+- **Docker**: 20.10+ with Docker Compose v2
 - **Access**: Root or sudo user
 - **Domain**: DNS pointed to your VPS IP
 
