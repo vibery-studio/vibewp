@@ -10,35 +10,19 @@ services:
       WORDPRESS_DB_PASSWORD: {{ db_password }}
       WORDPRESS_DB_NAME: {{ db_name }}
       SERVER_NAME: {{ domain }}
-      # FrankenPHP/Caddy configuration
-      FRANKENPHP_CONFIG: |
-        {
-          # Enable worker mode for better performance
-          worker /var/www/html/frankenphp-worker.php
-          # Number of workers
-          num_workers {{ num_workers | default(2) }}
-        }
     volumes:
-      - wp_content:/var/www/html/wp-content
-      - wp_config:/var/www/html/wp-config.php:ro
+      - wp_data:/var/www/html
     networks:
       - default
       - proxy
     labels:
-      # Caddy proxy configuration
       caddy: {{ domain }}
       caddy.reverse_proxy: "{{ '{{upstreams 80}}' }}"
-      # Enable auto HTTPS
       caddy.tls: "internal"
-      # Optional: www redirect
-      {% if www_redirect %}caddy.redir: "www.{{ domain }} {{ domain }}"{% endif %}
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "php-fpm-healthcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
 
   db:
     image: mariadb:10.11
@@ -68,10 +52,8 @@ services:
       --innodb_log_file_size=64M
 
 volumes:
-  wp_content:
-    name: {{ site_name }}_wp_content
-  wp_config:
-    name: {{ site_name }}_wp_config
+  wp_data:
+    name: {{ site_name }}_wp_data
   db_data:
     name: {{ site_name }}_db_data
 
