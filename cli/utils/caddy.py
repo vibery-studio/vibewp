@@ -43,7 +43,7 @@ class CaddyManager:
         # If compose file doesn't exist, try reading from Docker container labels
         if exit_code != 0:
             container_name = f"{site_name}_wp"
-            exit_code2, label_content, _ = self.ssh.run_command(
+            exit_code2, label_content, stderr2 = self.ssh.run_command(
                 f"docker inspect {container_name} --format '{{{{index .Config.Labels \"caddy\"}}}}' 2>/dev/null"
             )
             if exit_code2 == 0 and label_content.strip():
@@ -52,7 +52,13 @@ class CaddyManager:
                 domains = re.findall(r'([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', label_content)
                 if domains:
                     return list(set(domains))
-            raise RuntimeError(f"Failed to read compose file: {stderr}")
+                # Caddy label exists but no valid domains found
+                raise RuntimeError(f"Site '{site_name}' has no configured domains in Caddy labels")
+            # Both compose file and Docker inspect failed
+            raise RuntimeError(
+                f"Site '{site_name}' not found. "
+                f"Neither docker-compose.yml exists nor container is running."
+            )
 
         # Parse YAML
         compose_data = yaml.safe_load(content)
