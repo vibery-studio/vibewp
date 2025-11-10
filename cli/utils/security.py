@@ -136,14 +136,20 @@ class SecurityScanner:
         exit_code, upgradable, _ = self.ssh.run_command(
             "apt list --upgradable 2>/dev/null | grep -c '^' || echo 0"
         )
-        total_updates = int(upgradable.strip()) - 1  # Subtract header line
-        total_updates = max(0, total_updates)
+        try:
+            total_updates = int(upgradable.strip() or '0') - 1  # Subtract header line
+            total_updates = max(0, total_updates)
+        except (ValueError, AttributeError):
+            total_updates = 0
 
         # Count security updates
         exit_code, security, _ = self.ssh.run_command(
             "apt list --upgradable 2>/dev/null | grep -i security | wc -l || echo 0"
         )
-        security_updates = int(security.strip())
+        try:
+            security_updates = int(security.strip() or '0')
+        except (ValueError, AttributeError):
+            security_updates = 0
 
         return {
             'total': total_updates,
@@ -295,18 +301,23 @@ class Fail2BanManager:
         for line in output.split('\n'):
             if 'Currently banned:' in line:
                 try:
-                    stats['currently_banned'] = int(line.split(':')[1].strip())
-                except (ValueError, IndexError):
+                    value = line.split(':')[1].strip()
+                    stats['currently_banned'] = int(value) if value else 0
+                except (ValueError, IndexError, AttributeError):
                     pass
             elif 'Total banned:' in line:
                 try:
-                    stats['total_banned'] = int(line.split(':')[1].strip())
-                except (ValueError, IndexError):
+                    value = line.split(':')[1].strip()
+                    stats['total_banned'] = int(value) if value else 0
+                except (ValueError, IndexError, AttributeError):
                     pass
             elif 'Banned IP list:' in line:
-                ips_str = line.split(':')[1].strip()
-                if ips_str:
-                    stats['banned_ips'] = [ip.strip() for ip in ips_str.split()]
+                try:
+                    ips_str = line.split(':')[1].strip()
+                    if ips_str:
+                        stats['banned_ips'] = [ip.strip() for ip in ips_str.split()]
+                except (IndexError, AttributeError):
+                    pass
 
         return stats
 
