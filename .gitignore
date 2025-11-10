@@ -1,0 +1,9 @@
+.claude/
+.opencode/
+plans/
+*.yaml
+!.vibewp-dev.yaml.example
+is_rsa_vibery_test*
+__pycache__/
+*.egg-info/
+.DS_Store

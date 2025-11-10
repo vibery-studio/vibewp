@@ -1,0 +1,22 @@
+# CLI Framework
+typer[all]==0.12.5
+rich==13.7.1
+
+# Interactive Menus
+simple-term-menu==1.6.4
+
+# Configuration & Validation
+pydantic==2.9.2
+pyyaml==6.0.2
+
+# Template Rendering
+jinja2==3.1.4
+
+# Docker Integration
+docker==7.1.0
+
+# SSH Operations
+paramiko==3.5.0
+
+# HTTP Client
+requests==2.32.3

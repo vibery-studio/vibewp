@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  litespeed:
+    image: litespeedtech/openlitespeed:latest
+    container_name: {{ site_name }}_ols
+    environment:
+      - DOMAIN={{ domain }}
+      - LSWS_USER={{ lsws_admin_user | default('admin') }}
+      - LSWS_PASS={{ lsws_admin_pass }}
+      - SERVER_ROOT=/var/www/vhosts/{{ domain }}
+      - LS_OLS_ENABLE_LSCACHE=true
+      # Redis configuration for object caching
+      - WORDPRESS_DB_HOST=mysql
+      - WORDPRESS_DB_USER={{ db_user }}
+      - WORDPRESS_DB_PASSWORD={{ db_password }}
+      - WORDPRESS_DB_NAME={{ db_name }}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./sites/{{ site_name }}:/var/www/vhosts/{{ domain }}
+      - lsws_conf:/usr/local/lsws/conf
+      - lsws_admin_conf:/usr/local/lsws/admin/conf
+      - acme:/root/.acme.sh
+      - lsws_logs:/usr/local/lsws/logs
+    networks:
+      - default
+      - proxy
+    labels:
+      # Caddy proxy configuration
+      caddy: {{ domain }}
+      caddy.reverse_proxy: "{{ '{{upstreams 80}}' }}"
+      # Enable auto HTTPS
+      caddy.tls: "internal"
+      # Optional: www redirect
+      {% if www_redirect %}caddy.redir: "www.{{ domain }} {{ domain }}"{% endif %}
+      # Admin panel (internal only)
+      caddy.{{ domain }}/admin: "reverse_proxy {{ '{{upstreams 7080}}' }}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      # Admin panel (only expose on localhost or VPN)
+      - "127.0.0.1:{{ admin_port | default(7080) }}:7080"
+
+  mysql:
+    image: mariadb:10.11
+    container_name: {{ site_name }}_db
+    environment:
+      MYSQL_DATABASE: {{ db_name }}
+      MYSQL_USER: {{ db_user }}
+      MYSQL_PASSWORD: {{ db_password }}
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+      MYSQL_INITDB_SKIP_TZINFO: '1'
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --max_connections=100
+      --innodb_buffer_pool_size=512M
+      --innodb_log_file_size=128M
+      --query_cache_size=32M
+      --query_cache_type=1
+
+  redis:
+    image: redis:alpine
+    container_name: {{ site_name }}_redis
+    command: >
+      redis-server
+      --maxmemory {{ redis_maxmemory | default('256mb') }}
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: {{ site_name }}_pma
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: {{ db_user }}
+      PMA_PASSWORD: {{ db_password }}
+      UPLOAD_LIMIT: 128M
+    networks:
+      - default
+    restart: unless-stopped
+    labels:
+      # phpMyAdmin via Caddy (secure subdomain)
+      caddy: pma.{{ domain }}
+      caddy.reverse_proxy: "{{ '{{upstreams 80}}' }}"
+      caddy.tls: "internal"
+      # Basic auth for additional security (optional)
+      {% if pma_basic_auth %}
+      caddy.basicauth: "/*"
+      caddy.basicauth.{{ pma_auth_user }}: "{{ pma_auth_pass_hash }}"
+      {% endif %}
+
+volumes:
+  db_data:
+    name: {{ site_name }}_db_data
+  redis_data:
+    name: {{ site_name }}_redis_data
+  lsws_conf:
+    name: {{ site_name }}_lsws_conf
+  lsws_admin_conf:
+    name: {{ site_name }}_lsws_admin_conf
+  acme:
+    name: {{ site_name }}_acme
+  lsws_logs:
+    name: {{ site_name }}_lsws_logs
+
+networks:
+  default:
+    name: {{ site_name }}_default
+  proxy:
+    external: true

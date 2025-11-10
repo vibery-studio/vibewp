@@ -1,0 +1,44 @@
+# Caddyfile.j2 - Template for custom Caddy configuration
+# Note: caddy-docker-proxy automatically generates config from Docker labels
+# This file is for advanced customization only
+
+{
+    # Global options
+    email {{ admin_email | default('admin@example.com') }}
+
+    # Enable admin API
+    admin :2019
+
+    # Use staging CA for testing (uncomment when needed)
+    # acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+# Custom global snippets (optional)
+(security_headers) {
+    header {
+        # Security headers
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Remove server info
+        -Server
+    }
+}
+
+(compression) {
+    encode gzip zstd
+}
+
+# Global rate limiting (optional)
+(rate_limit) {
+    rate_limit {
+        zone dynamic {
+            key {remote_host}
+            events 100
+            window 1m
+        }
+    }
+}
