@@ -20,7 +20,7 @@ app.add_typer(config_app, name="config")
 
 # Import all command groups
 from cli.commands.site import app as site_app
-from cli.commands import firewall, ssh_cmd, security, system, backup, domain, update, sftp, doctor, proxy
+from cli.commands import firewall, ssh_cmd, security, system, backup, domain, update, sftp, doctor, proxy, php
 
 # Register command groups
 app.add_typer(site_app, name="site")
@@ -34,6 +34,7 @@ app.add_typer(update.app, name="update")
 app.add_typer(sftp.app, name="sftp")
 app.add_typer(doctor.app, name="doctor")
 app.add_typer(proxy.app, name="proxy")
+app.add_typer(php.app, name="php")
 
 
 def version_callback(value: bool):
