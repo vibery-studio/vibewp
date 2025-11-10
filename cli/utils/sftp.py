@@ -162,8 +162,8 @@ class SFTPManager:
         # Update sshd_config
         self._update_sshd_config(username, chroot_base)
 
-        # Reload SSH service
-        exit_code, _, stderr = self.ssh.run_command("systemctl reload sshd")
+        # Reload SSH service (try both ssh and sshd names)
+        exit_code, _, stderr = self.ssh.run_command("systemctl reload ssh || systemctl reload sshd")
         if exit_code != 0:
             raise RuntimeError(f"Failed to reload SSH service: {stderr}")
 
@@ -205,8 +205,8 @@ class SFTPManager:
         # Remove from sshd_config
         self._remove_from_sshd_config(username)
 
-        # Reload SSH service
-        exit_code, _, stderr = self.ssh.run_command("systemctl reload sshd")
+        # Reload SSH service (try both ssh and sshd names)
+        exit_code, _, stderr = self.ssh.run_command("systemctl reload ssh || systemctl reload sshd")
         if exit_code != 0:
             raise RuntimeError(f"Failed to reload SSH service: {stderr}")
 
@@ -290,9 +290,12 @@ class SFTPManager:
             return  # Already configured
 
         # Add Match User block at the end
+        # AuthorizedKeysFile must be absolute path since it's checked before chroot
+        auth_keys_path = f"{chroot_path}/{username}/.ssh/authorized_keys"
         match_block = f"""
 # SFTP chroot for {username}
 Match User {username}
+    AuthorizedKeysFile {auth_keys_path}
     ChrootDirectory {chroot_path}
     ForceCommand internal-sftp
     AllowTcpForwarding no

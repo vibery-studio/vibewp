@@ -5,7 +5,7 @@ from typing import Optional
 from pathlib import Path
 
 from ..utils.ssh import SSHManager
-from ..utils.config import get_config
+from ..utils.config import ConfigManager
 from ..utils.sftp import SFTPManager
 from ..ui.console import (
     console, print_success, print_error, print_info,
@@ -17,13 +17,16 @@ app = typer.Typer(help="Manage SFTP access with site-specific restrictions")
 
 def get_sftp_manager() -> SFTPManager:
     """Get configured SFTP manager instance"""
-    config = get_config()
+    config_mgr = ConfigManager()
+    vps_config = config_mgr.vps
+
     ssh_manager = SSHManager(
-        host=config['vps']['host'],
-        port=config['vps'].get('port', 22),
-        username=config['vps']['user'],
-        key_path=config['vps'].get('key_path')
+        host=vps_config.host,
+        port=vps_config.port,
+        user=vps_config.user,
+        key_path=vps_config.key_path
     )
+    ssh_manager.connect()
     return SFTPManager(ssh_manager)
 
 
