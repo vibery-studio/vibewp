@@ -189,7 +189,7 @@ class BackupManager:
 
     def site_exists(self, site_name: str) -> bool:
         """
-        Check if site exists
+        Check if site exists (either as directory or Docker container)
 
         Args:
             site_name: Site name
@@ -197,8 +197,17 @@ class BackupManager:
         Returns:
             True if site exists, False otherwise
         """
-        site_path = f"{self.base_path}/{site_name}"
+        # First check if site directory exists (new structure)
+        site_path = f"{self.base_path}/sites/{site_name}"
         exit_code, _, _ = self.ssh.run_command(f"test -d {site_path}")
+        if exit_code == 0:
+            return True
+
+        # Fallback: Check if Docker container exists (legacy sites)
+        container_name = f"{site_name}_wp"
+        exit_code, _, _ = self.ssh.run_command(
+            f"docker ps -a --filter name=^{container_name}$ --format '{{{{.Names}}}}' | grep -q '^{container_name}$'"
+        )
         return exit_code == 0
 
     def create_backup(self, site_name: str, compress: bool = True) -> str:
