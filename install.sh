@@ -89,29 +89,47 @@ ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null || true
 
 # Check if Docker is installed
 if ! command -v docker &> /dev/null; then
-    warn "Docker not found. Please install Docker first:"
-    warn "  curl -fsSL https://get.docker.com | sh"
-    warn "  systemctl start docker && systemctl enable docker"
+    log "Docker not found. Installing Docker..."
+    curl -fsSL https://get.docker.com | sh
+
+    # Start and enable Docker
+    systemctl start docker
+    systemctl enable docker
+
+    # Add current user to docker group (if not root)
+    if [[ $EUID -ne 0 && -n "$SUDO_USER" ]]; then
+        usermod -aG docker "$SUDO_USER"
+        log "Added $SUDO_USER to docker group (logout required for non-sudo docker)"
+    fi
+
+    # Wait for Docker to be ready
+    sleep 3
+
+    if command -v docker &> /dev/null; then
+        log "✓ Docker installed successfully"
+    else
+        error "Docker installation failed"
+    fi
 else
     log "✓ Docker is installed"
+fi
 
-    # Create proxy network if it doesn't exist
-    if ! docker network ls | grep -q "proxy"; then
-        log "Creating proxy network..."
-        docker network create proxy >/dev/null 2>&1 || true
-        log "✓ Proxy network created"
-    else
-        log "✓ Proxy network already exists"
-    fi
+# Create proxy network if it doesn't exist
+if ! docker network ls | grep -q "proxy"; then
+    log "Creating proxy network..."
+    docker network create proxy >/dev/null 2>&1 || true
+    log "✓ Proxy network created"
+else
+    log "✓ Proxy network already exists"
+fi
 
-    # Deploy Caddy proxy if not running
-    if ! docker ps | grep -q caddy_proxy; then
-        log "Deploying Caddy reverse proxy..."
-        cd "$INSTALL_DIR"
-        docker compose -f templates/caddy/docker-compose.yml up -d >/dev/null 2>&1 || warn "Failed to deploy Caddy (will retry later)"
-    else
-        log "✓ Caddy proxy already running"
-    fi
+# Deploy Caddy proxy if not running
+if ! docker ps | grep -q caddy_proxy; then
+    log "Deploying Caddy reverse proxy..."
+    cd "$INSTALL_DIR"
+    docker compose -f templates/caddy/docker-compose.yml up -d >/dev/null 2>&1 || warn "Failed to deploy Caddy (will retry later)"
+else
+    log "✓ Caddy proxy already running"
 fi
 
 # Initialize config directory

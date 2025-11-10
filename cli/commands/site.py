@@ -144,6 +144,52 @@ def create_site(
                 print_error(f"Template rendering failed: {e}")
                 raise typer.Exit(code=1)
 
+        # Ensure proxy network exists and Caddy is running
+        print_info("Checking Docker proxy network...")
+        from cli.utils.docker import DockerManager
+        import subprocess
+        try:
+            docker_mgr = DockerManager()
+            network_name = config_mgr.docker.network_name
+
+            if not docker_mgr.network_exists(network_name):
+                print_info(f"Creating proxy network '{network_name}'...")
+                docker_mgr.create_network(network_name)
+                print_success(f"✓ Network '{network_name}' created")
+            else:
+                print_success(f"✓ Network '{network_name}' exists")
+
+            # Check if Caddy proxy is running
+            caddy_container = docker_mgr.get_container("caddy_proxy")
+            if not caddy_container or caddy_container.status != "running":
+                print_info("Caddy proxy not running, deploying...")
+                result = subprocess.run(
+                    ["docker", "compose", "-f", "/opt/vibewp/templates/caddy/docker-compose.yml", "up", "-d"],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                if result.returncode != 0:
+                    print_error(f"Failed to deploy Caddy: {result.stderr}")
+                    raise typer.Exit(code=1)
+
+                # Wait for Caddy to start
+                import time
+                time.sleep(2)
+
+                caddy_container = docker_mgr.get_container("caddy_proxy")
+                if caddy_container and caddy_container.status == "running":
+                    print_success("✓ Caddy proxy deployed successfully")
+                else:
+                    print_error("Caddy failed to start")
+                    raise typer.Exit(code=1)
+            else:
+                print_success("✓ Caddy proxy is running")
+
+        except Exception as e:
+            print_error(f"Failed to setup proxy: {e}")
+            raise typer.Exit(code=1)
+
         # Connect to VPS via SSH
         print_info(f"Connecting to VPS {config_mgr.vps.host}...")
         ssh = SSHManager(
