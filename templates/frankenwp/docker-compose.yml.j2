@@ -2,14 +2,16 @@ version: '3.8'
 
 services:
   wordpress:
-    image: stephenmiracle/frankenwp:latest
+    image: wordpress:latest
     container_name: {{ site_name }}_wp
     environment:
-      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_HOST: db:3306
       WORDPRESS_DB_USER: {{ db_user }}
       WORDPRESS_DB_PASSWORD: {{ db_password }}
       WORDPRESS_DB_NAME: {{ db_name }}
-      SERVER_NAME: {{ domain }}
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_HOME', 'https://{{ domain }}');
+        define('WP_SITEURL', 'https://{{ domain }}');
     volumes:
       - wp_data:/var/www/html
     networks:
@@ -17,7 +19,7 @@ services:
       - proxy
     labels:
       caddy: {{ domain }}
-      caddy.reverse_proxy: "{{ '{{upstreams 80}}' }}"
+      caddy.reverse_proxy: "{{ '{{upstreams}}' }}"
       caddy.tls: "internal"
     depends_on:
       db:
