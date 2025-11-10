@@ -122,6 +122,8 @@ Caddy Reverse Proxy (Auto HTTPS)
 - ✅ 32-character database passwords
 - ✅ Network isolation per site
 - ✅ Automatic HTTPS (Let's Encrypt)
+- ✅ SFTP access with site-specific restrictions
+- ✅ Server security auditing with WPScan integration
 
 ## 📦 What Gets Installed
 
@@ -174,6 +176,39 @@ vibewp security audit-server --format html --output ~/audit-report.html
 vibewp security set-wpscan-token YOUR_TOKEN
 vibewp security audit-server --format json --output ~/audit.json
 ```
+
+### Manage SFTP Access
+
+Grant site-specific SFTP access (wp-content only):
+```bash
+# Add SFTP access
+vibewp sftp add-key mysite ~/.ssh/id_rsa.pub --id john
+
+# List SFTP users
+vibewp sftp list
+vibewp sftp list mysite
+
+# Remove access
+vibewp sftp remove-key mysite john
+
+# Test configuration
+vibewp sftp test mysite john
+
+# Show detailed info
+vibewp sftp info
+```
+
+**Client connection** (user sees only /wp-content):
+```bash
+sftp sftp_mysite_john@your-server.com
+```
+
+**Features**:
+- SSH key authentication only (no passwords)
+- Chroot jail restricted to site's wp-content
+- No shell access - SFTP only
+- Cannot navigate outside wp-content
+- Cannot access other sites
 
 ## 🔧 Configuration
 
