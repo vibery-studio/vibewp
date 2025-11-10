@@ -47,13 +47,32 @@ services:
       # Admin panel (only expose on localhost or VPN)
       - "127.0.0.1:{{ admin_port | default(7080) }}:7080"
 
+  wpcli:
+    image: wordpress:cli
+    container_name: {{ site_name }}_wpcli
+    user: "33:33"
+    environment:
+      WORDPRESS_DB_HOST: mysql:3306
+      WORDPRESS_DB_USER: {{ db_user }}
+      WORDPRESS_DB_PASSWORD: "{{ db_password }}"
+      WORDPRESS_DB_NAME: {{ db_name }}
+    volumes:
+      - ./sites/{{ site_name }}:/var/www/vhosts/{{ domain }}
+    networks:
+      - default
+    depends_on:
+      mysql:
+        condition: service_healthy
+    entrypoint: sh
+    command: -c "sleep infinity"
+
   mysql:
     image: mariadb:10.11
     container_name: {{ site_name }}_db
     environment:
       MYSQL_DATABASE: {{ db_name }}
       MYSQL_USER: {{ db_user }}
-      MYSQL_PASSWORD: {{ db_password }}
+      MYSQL_PASSWORD: "{{ db_password }}"
       MYSQL_RANDOM_ROOT_PASSWORD: '1'
       MYSQL_INITDB_SKIP_TZINFO: '1'
     volumes:
@@ -103,7 +122,7 @@ services:
       PMA_HOST: mysql
       PMA_PORT: 3306
       PMA_USER: {{ db_user }}
-      PMA_PASSWORD: {{ db_password }}
+      PMA_PASSWORD: "{{ db_password }}"
       UPLOAD_LIMIT: 128M
     networks:
       - default

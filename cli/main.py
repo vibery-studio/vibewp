@@ -20,21 +20,29 @@ app.add_typer(config_app, name="config")
 
 # Import all command groups
 from cli.commands.site import app as site_app
-from cli.commands import firewall, ssh_cmd, security, system, backup
+from cli.commands import firewall, ssh_cmd, security, system, backup, domain, update
 
 # Register command groups
 app.add_typer(site_app, name="site")
+app.add_typer(domain.app, name="domain")
 app.add_typer(firewall.app, name="firewall")
 app.add_typer(ssh_cmd.app, name="ssh")
 app.add_typer(security.app, name="security")
 app.add_typer(system.app, name="system")
 app.add_typer(backup.app, name="backup")
+app.add_typer(update.app, name="update")
 
 
 def version_callback(value: bool):
     """Show version and exit"""
     if value:
-        typer.echo(f"VibeWP CLI v{__version__}")
+        from cli.utils.update import UpdateManager
+        try:
+            manager = UpdateManager()
+            install_method = manager.install_method.value
+            typer.echo(f"VibeWP CLI v{__version__} ({install_method})")
+        except Exception:
+            typer.echo(f"VibeWP CLI v{__version__}")
         raise typer.Exit()
 
 

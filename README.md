@@ -43,7 +43,13 @@ curl -fsSL https://raw.githubusercontent.com/vibery-studio/vibewp/main/install.s
 vibewp site create
 ```
 
-**No additional configuration needed!** Just follow the interactive prompts.
+**Fully automated WordPress installation!** The command will:
+- Deploy WordPress containers (FrankenWP or OpenLiteSpeed)
+- Auto-install WordPress via WP-CLI
+- Generate secure credentials
+- Display admin login details immediately
+
+No manual WordPress setup form required!
 
 ## 📋 Requirements
 
@@ -77,9 +83,19 @@ vibewp domain ssl-status <site>         # SSL certificates
 ```bash
 vibewp firewall list|open|close         # Firewall control
 vibewp ssh change-port <port>           # SSH configuration
-vibewp security scan                    # Security audit
+vibewp security scan                    # Basic security audit
+vibewp security audit-server            # Full server audit (system + WP + vulnerabilities)
 vibewp system status                    # Resource usage
 vibewp backup create <site>             # Backup site
+```
+
+### Self-Update Management
+```bash
+vibewp update check                     # Check for new version
+vibewp update install                   # Install latest version
+vibewp update cleanup                   # Cleanup old backups
+vibewp update info                      # Show install method
+vibewp --version                        # Show version & install method
 ```
 
 ### Interactive Menu
@@ -146,6 +162,19 @@ vibewp ssh change-port 2222
 # Automatic rollback if connection fails
 ```
 
+### Run Full Server Security Audit
+```bash
+# Basic audit with console output
+vibewp security audit-server
+
+# Save HTML report
+vibewp security audit-server --format html --output ~/audit-report.html
+
+# With WPScan vulnerability scanning (API token required)
+vibewp security set-wpscan-token YOUR_TOKEN
+vibewp security audit-server --format json --output ~/audit.json
+```
+
 ## 🔧 Configuration
 
 Config stored in `~/.vibewp/sites.yaml`:
@@ -156,6 +185,7 @@ vps:
   port: 22
   user: "root"
   key_path: "~/.ssh/id_rsa"
+  wpscan_api_token: "YOUR_WPSCAN_TOKEN"  # Optional, for vulnerability scanning
 
 sites:
   myblog:
@@ -164,6 +194,11 @@ sites:
     status: "running"
     created: "2025-11-10T16:00:00Z"
 ```
+
+**WPScan API Setup** (optional, for vulnerability scanning):
+- Get free token: https://wpscan.com/api
+- Configure: `vibewp security set-wpscan-token YOUR_TOKEN`
+- Free tier: 25 requests/day
 
 ## 🐛 Troubleshooting
 

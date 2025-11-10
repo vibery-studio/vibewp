@@ -21,3 +21,6 @@ paramiko==3.5.0
 
 # HTTP Client
 requests==2.32.3
+
+# PDF Generation
+reportlab==4.0.9

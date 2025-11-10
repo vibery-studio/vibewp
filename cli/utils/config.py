@@ -14,6 +14,7 @@ class VPSConfig(BaseModel):
     port: int = 22
     user: str
     key_path: str
+    wpscan_api_token: Optional[str] = None
 
     @validator('port')
     def validate_port(cls, v):
@@ -359,3 +360,38 @@ class ConfigManager:
             return [site.domain]
 
         return site.domains
+
+    def get_wpscan_token(self) -> Optional[str]:
+        """
+        Get WPScan API token from configuration
+
+        Returns:
+            WPScan API token or None if not configured
+        """
+        if not self._config:
+            self.load_config()
+        return self._config.vps.wpscan_api_token
+
+    def set_wpscan_token(self, token: str) -> None:
+        """
+        Set WPScan API token in configuration
+
+        Args:
+            token: WPScan API token
+
+        Note:
+            Token is stored securely in config file with 600 permissions
+        """
+        if not self._config:
+            self.load_config()
+
+        self._config.vps.wpscan_api_token = token
+        self.save_config()
+
+    def clear_wpscan_token(self) -> None:
+        """Clear WPScan API token from configuration"""
+        if not self._config:
+            self.load_config()
+
+        self._config.vps.wpscan_api_token = None
+        self.save_config()

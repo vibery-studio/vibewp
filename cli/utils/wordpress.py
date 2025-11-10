@@ -1,5 +1,6 @@
 """WordPress management utilities for VibeWP CLI"""
 
+import shlex
 from typing import Dict, Optional
 
 
@@ -57,7 +58,7 @@ class WordPressManager:
         Install WordPress via WP-CLI
 
         Args:
-            container_name: WordPress container name
+            container_name: WP-CLI container name
             site_config: Site configuration dictionary
             wp_type: WordPress type (frankenwp or ols)
 
@@ -68,16 +69,22 @@ class WordPressManager:
             # Determine WordPress path based on type
             wp_path = "/var/www/html" if wp_type == "frankenwp" else f"/var/www/vhosts/{site_config['domain']}"
 
-            # Build WP-CLI command
-            cmd = f"""docker exec {container_name} wp core install \\
+            # Escape all user inputs to prevent command injection
+            safe_title = shlex.quote(site_config.get('site_title', site_config['domain']))
+            safe_user = shlex.quote(site_config['wp_admin_user'])
+            safe_password = shlex.quote(site_config['wp_admin_password'])
+            safe_email = shlex.quote(site_config['wp_admin_email'])
+            safe_url = shlex.quote(f"https://{site_config['domain']}")
+
+            # Build WP-CLI command with escaped parameters
+            cmd = f"""docker exec -u www-data {container_name} wp core install \\
                 --path={wp_path} \\
-                --url=https://{site_config['domain']} \\
-                --title='{site_config.get('site_title', site_config['domain'])}' \\
-                --admin_user={site_config['wp_admin_user']} \\
-                --admin_password='{site_config['wp_admin_password']}' \\
-                --admin_email={site_config['wp_admin_email']} \\
-                --skip-email \\
-                --allow-root"""
+                --url={safe_url} \\
+                --title={safe_title} \\
+                --admin_user={safe_user} \\
+                --admin_password={safe_password} \\
+                --admin_email={safe_email} \\
+                --skip-email"""
 
             exit_code, stdout, stderr = self.ssh.run_command(cmd, timeout=120)
 
@@ -120,9 +127,10 @@ class WordPressManager:
                     raise ValueError("Domain is required for OLS WordPress type")
                 wp_path = f"/var/www/vhosts/{domain}"
 
+            safe_url = shlex.quote(url)
             commands = [
-                f"docker exec {container_name} wp option update siteurl '{url}' --path={wp_path} --allow-root",
-                f"docker exec {container_name} wp option update home '{url}' --path={wp_path} --allow-root"
+                f"docker exec {container_name} wp option update siteurl {safe_url} --path={wp_path} --allow-root",
+                f"docker exec {container_name} wp option update home {safe_url} --path={wp_path} --allow-root"
             ]
 
             for cmd in commands:
@@ -156,8 +164,9 @@ class WordPressManager:
         """
         try:
             wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
+            safe_plugin = shlex.quote(plugin_slug)
 
-            cmd = f"docker exec {container_name} wp plugin install {plugin_slug} --path={wp_path} --allow-root"
+            cmd = f"docker exec {container_name} wp plugin install {safe_plugin} --path={wp_path} --allow-root"
             if activate:
                 cmd += " --activate"
 
@@ -229,9 +238,14 @@ class WordPressManager:
             password = CredentialGenerator.generate_password(16, False)
             wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
 
-            cmd = f"""docker exec {container_name} wp user create {username} {email} \\
-                --role={role} \\
-                --user_pass='{password}' \\
+            safe_username = shlex.quote(username)
+            safe_email = shlex.quote(email)
+            safe_password = shlex.quote(password)
+            safe_role = shlex.quote(role)
+
+            cmd = f"""docker exec {container_name} wp user create {safe_username} {safe_email} \\
+                --role={safe_role} \\
+                --user_pass={safe_password} \\
                 --path={wp_path} \\
                 --allow-root"""
 
@@ -267,7 +281,10 @@ class WordPressManager:
         try:
             wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
 
-            cmd = f"docker exec {container_name} wp option update {option_name} '{option_value}' --path={wp_path} --allow-root"
+            safe_option_name = shlex.quote(option_name)
+            safe_option_value = shlex.quote(option_value)
+
+            cmd = f"docker exec {container_name} wp option update {safe_option_name} {safe_option_value} --path={wp_path} --allow-root"
 
             exit_code, stdout, stderr = self.ssh.run_command(cmd, timeout=30)
             return exit_code == 0

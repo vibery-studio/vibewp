@@ -204,19 +204,58 @@ def create_site(
                 if not health_checker.wait_for_container(wp_container, timeout=60):
                     raise RuntimeError("WordPress container failed to start")
 
-                # Note: WordPress auto-installs on first visit
-                # WP-CLI installation skipped (requires wordpress:cli image)
+                # Wait for WP-CLI container
+                wpcli_container = f"{site_name}_wpcli"
+                if not health_checker.wait_for_container(wpcli_container, timeout=60):
+                    raise RuntimeError("WP-CLI container failed to start")
+
                 progress.update(task, description="WordPress containers ready...")
+
+                # Wait for WordPress files to be ready
+                progress.update(task, description="Waiting for WordPress files...")
+                wp_path = "/var/www/html" if wp_type == "frankenwp" else f"/var/www/vhosts/{domain}"
+                wp_ready = False
+                for attempt in range(30):  # 30 seconds max
+                    exit_code, _, _ = ssh.run_command(
+                        f"docker exec {wpcli_container} test -f {wp_path}/wp-load.php",
+                        timeout=5
+                    )
+                    if exit_code == 0:
+                        wp_ready = True
+                        break
+                    time.sleep(1)
+
+                if not wp_ready:
+                    raise RuntimeError("WordPress files not ready after 30 seconds")
+
+                # Auto-install WordPress using WP-CLI
+                progress.update(task, description="Installing WordPress via WP-CLI...")
+                wp_manager = WordPressManager(ssh_manager=ssh)
+
+                try:
+                    if not wp_manager.core_install(
+                        container_name=wpcli_container,
+                        site_config={
+                            'domain': domain,
+                            'site_title': site_title,
+                            'wp_admin_user': creds['wp_admin_user'],
+                            'wp_admin_password': creds['wp_admin_password'],
+                            'wp_admin_email': admin_email
+                        },
+                        wp_type=wp_type
+                    ):
+                        raise RuntimeError("WordPress installation failed")
+
+                    progress.update(task, description="WordPress installed successfully...")
+                except Exception as e:
+                    raise RuntimeError(f"WordPress core installation failed: {e}")
 
                 # Verify site accessibility
                 progress.update(task, description="Verifying site accessibility...")
                 site_url = f"https://{domain}"
 
-                # Wait a bit for WordPress to initialize
-                time.sleep(5)
-
                 if not health_checker.wait_for_http(site_url, timeout=30, verify_ssl=False):
-                    print_warning("Site may not be accessible yet (this is normal for new sites)")
+                    print_warning("Site may not be accessible via HTTPS yet (checking installation status)")
 
             # Add site to registry
             site_config = SiteConfig(
@@ -233,18 +272,19 @@ def create_site(
                 f"[bold green]Site Created Successfully![/bold green]\n\n"
                 f"[bold]Site Name:[/bold] {site_name}\n"
                 f"[bold]Domain:[/bold] {domain}\n"
-                f"[bold]Engine:[/bold] {wp_type}\n\n"
-                f"[bold cyan]Next Steps:[/bold cyan]\n"
-                f"1. Visit {site_url} to complete WordPress installation\n"
-                f"2. Use these database credentials during setup:\n"
-                f"   - Database: {creds['db_name']}\n"
-                f"   - Username: {creds['db_user']}\n"
-                f"   - Password: (auto-configured)\n"
-                f"   - Host: db\n\n"
-                f"[bold cyan]Admin Login:[/bold cyan]\n"
+                f"[bold]Engine:[/bold] {wp_type}\n"
+                f"[bold]Site URL:[/bold] {site_url}\n\n"
+                f"[bold cyan]WordPress Admin Credentials:[/bold cyan]\n"
                 f"  URL: {site_url}/wp-admin\n"
-                f"  (Set during installation)\n\n"
-                f"[yellow]⚠ Complete installation within 5 minutes![/yellow]",
+                f"  Username: {creds['wp_admin_user']}\n"
+                f"  Password: {creds['wp_admin_password']}\n"
+                f"  Email: {admin_email}\n\n"
+                f"[bold cyan]Database Credentials:[/bold cyan]\n"
+                f"  Database: {creds['db_name']}\n"
+                f"  Username: {creds['db_user']}\n"
+                f"  Password: {creds['db_password']}\n"
+                f"  Host: db (FrankenWP) / mysql (OLS)\n\n"
+                f"[green]✓ WordPress is fully installed and ready to use![/green]",
                 title="VibeWP Site Creation",
                 border_style="green"
             ))

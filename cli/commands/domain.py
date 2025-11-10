@@ -19,6 +19,102 @@ console = Console()
 app = typer.Typer(help="Domain management commands")
 
 
+@app.command("refresh-ssl")
+def refresh_ssl_command(
+    site_name: str = typer.Argument(..., help="Site name"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation")
+):
+    """Refresh SSL certificates for a site"""
+    try:
+        # Load config
+        config = ConfigManager()
+        site = config.get_site(site_name)
+
+        if not site:
+            print_error(f"Site '{site_name}' not found")
+            raise typer.Exit(code=1)
+
+        # Connect to VPS
+        print_info(f"Connecting to VPS {config.vps.host}...")
+        ssh = SSHManager(
+            host=config.vps.host,
+            port=config.vps.port,
+            user=config.vps.user,
+            key_path=config.vps.key_path
+        )
+
+        try:
+            ssh.connect()
+        except Exception as e:
+            print_error(f"SSH connection failed: {e}")
+            raise typer.Exit(code=1)
+
+        try:
+            caddy = CaddyManager(ssh, config.docker.base_path)
+
+            # Get domains
+            domains = caddy.get_site_domains(site.name)
+
+            console.print(f"\n[bold]Site:[/bold] {site.name}")
+            console.print(f"[bold]Domains:[/bold] {', '.join(domains)}\n")
+
+            # Confirm unless --yes
+            if not yes and not typer.confirm("Reload Caddy to refresh SSL certificates?", default=True):
+                print_info("SSL refresh cancelled")
+                raise typer.Exit(code=0)
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                transient=True
+            ) as progress:
+                task = progress.add_task(description="Reloading Caddy configuration...", total=None)
+
+                # Reload Caddy
+                caddy.reload_caddy(site.name)
+
+                # Wait for certificates
+                progress.update(task, description="Requesting SSL certificates...")
+                time.sleep(5)
+
+                # Check SSL status
+                progress.update(task, description="Verifying SSL certificates...")
+                results = []
+                for domain in domains:
+                    cert_status = caddy.get_cert_status(domain)
+                    results.append({
+                        'domain': domain,
+                        'status': cert_status.get('status'),
+                        'issuer': cert_status.get('issuer_org', 'Unknown')
+                    })
+                    time.sleep(1)
+
+            # Display results
+            console.print("\n[bold cyan]SSL Certificate Status:[/bold cyan]\n")
+            for result in results:
+                domain = result['domain']
+                status = result['status']
+                issuer = result['issuer']
+
+                if status == 'valid':
+                    console.print(f"  ✅ {domain} - Valid ({issuer})")
+                elif status == 'dns_error':
+                    console.print(f"  ⚠️  {domain} - DNS not configured")
+                elif status == 'timeout':
+                    console.print(f"  ⏱️  {domain} - Connection timeout")
+                else:
+                    console.print(f"  ❌ {domain} - {status}")
+
+            print_success("\nSSL certificates refreshed")
+
+        finally:
+            ssh.disconnect()
+
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(code=1)
+
+
 def manage_domains():
     """Domain management menu - select site and manage domains"""
     try:
@@ -89,6 +185,7 @@ def domain_menu(site):
                     "➖ Remove Domain",
                     "🏠 Set Primary Domain",
                     "🔒 View SSL Status",
+                    "🔄 Refresh SSL Certificates",
                     "🔙 Back"
                 ]
 
@@ -109,7 +206,9 @@ def domain_menu(site):
                     set_primary_domain(site, caddy, ssh, config)
                 elif choice == 3:
                     show_ssl_status(caddy, site)
-                elif choice == 4 or choice is None:
+                elif choice == 4:
+                    refresh_ssl_certificates(site, caddy)
+                elif choice == 5 or choice is None:
                     break
 
         finally:
@@ -372,6 +471,77 @@ def show_ssl_status(caddy: CaddyManager, site):
 
     except Exception as e:
         print_error(f"Failed to get SSL status: {e}")
+
+    console.input("\n[dim]Press Enter to continue...[/dim]")
+
+
+def refresh_ssl_certificates(site, caddy: CaddyManager):
+    """Force refresh SSL certificates for all site domains"""
+    try:
+        console.print("\n[bold cyan]Refresh SSL Certificates[/bold cyan]\n")
+
+        # Get all domains
+        domains = caddy.get_site_domains(site.name)
+
+        console.print(f"[bold]Site:[/bold] {site.name}")
+        console.print(f"[bold]Domains:[/bold] {', '.join(domains)}\n")
+
+        # Confirm
+        if not typer.confirm("Reload Caddy to refresh SSL certificates?", default=True):
+            return
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True
+        ) as progress:
+            task = progress.add_task(description="Reloading Caddy configuration...", total=None)
+
+            try:
+                # Reload Caddy (will trigger SSL certificate refresh)
+                caddy.reload_caddy(site.name)
+
+                # Wait for certificates to be requested
+                progress.update(task, description="Requesting SSL certificates...")
+                time.sleep(5)
+
+                # Check SSL status for each domain
+                progress.update(task, description="Verifying SSL certificates...")
+                results = []
+                for domain in domains:
+                    cert_status = caddy.get_cert_status(domain)
+                    results.append({
+                        'domain': domain,
+                        'status': cert_status.get('status'),
+                        'issuer': cert_status.get('issuer_org', 'Unknown')
+                    })
+                    time.sleep(1)  # Avoid rate limiting
+
+            except Exception as e:
+                print_error(f"Failed to reload Caddy: {e}")
+                console.input("\n[dim]Press Enter to continue...[/dim]")
+                return
+
+        # Display results
+        console.print("\n[bold cyan]SSL Certificate Status:[/bold cyan]\n")
+        for result in results:
+            domain = result['domain']
+            status = result['status']
+            issuer = result['issuer']
+
+            if status == 'valid':
+                console.print(f"  ✅ {domain} - Valid ({issuer})")
+            elif status == 'dns_error':
+                console.print(f"  ⚠️  {domain} - DNS not configured")
+            elif status == 'timeout':
+                console.print(f"  ⏱️  {domain} - Connection timeout")
+            else:
+                console.print(f"  ❌ {domain} - {status}")
+
+        print_success("\nSSL certificates refreshed")
+
+    except Exception as e:
+        print_error(f"Failed to refresh SSL certificates: {e}")
 
     console.input("\n[dim]Press Enter to continue...[/dim]")
 

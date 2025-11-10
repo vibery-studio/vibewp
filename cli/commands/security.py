@@ -1,11 +1,14 @@
 """Security auditing and monitoring commands"""
 
 import typer
+from pathlib import Path
 from rich.table import Table
 from rich.panel import Panel
 from cli.ui.console import console, print_success, print_error, print_warning, print_info, confirm
 from cli.utils.ssh import SSHManager
+from cli.utils.config import ConfigManager
 from cli.utils.security import SecurityScanner, Fail2BanManager
+from cli.utils.server_audit import ServerAuditManager
 
 app = typer.Typer(help="Security auditing and threat monitoring")
 
@@ -305,4 +308,198 @@ def install_updates(
 
     except Exception as e:
         print_error(f"Failed to install updates: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("audit-server")
+def audit_server(
+    format: str = typer.Option("console", "--format", help="Output format: console, json, html, pdf"),
+    output: str = typer.Option(None, "--output", help="Output file path"),
+    wp_api_token: str = typer.Option(None, "--wp-api-token", help="WPScan API token (overrides config)"),
+    skip_wordpress: bool = typer.Option(False, "--skip-wordpress", help="Skip WordPress audits"),
+    skip_lynis: bool = typer.Option(False, "--skip-lynis", help="Skip Lynis integration"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed progress")
+):
+    """Run comprehensive server security audit"""
+    try:
+        # Load configuration
+        config = ConfigManager()
+        config.load_config()
+
+        # Connect to VPS
+        ssh = SSHManager.from_config()
+
+        with console.status("[cyan]Connecting to VPS...", spinner="dots"):
+            ssh.connect()
+
+        print_success("Connected to VPS")
+
+        # Initialize audit manager
+        audit_manager = ServerAuditManager(ssh, config)
+
+        # Get WPScan API token (from parameter or config)
+        api_token = wp_api_token
+        if not api_token and not skip_wordpress:
+            api_token = config.get_wpscan_token() if hasattr(config, 'get_wpscan_token') else None
+            if not api_token and verbose:
+                print_info("No WPScan API token configured - vulnerability scanning will be skipped")
+
+        # Run audit with progress indicator
+        print_info("Starting comprehensive security audit...")
+        console.print("[dim]This may take several minutes depending on system size[/dim]\n")
+
+        try:
+            with console.status("[cyan]Running security audit...", spinner="dots") as status:
+                if verbose:
+                    status.stop()
+                    console.print("[cyan]Running system-level security checks...[/cyan]")
+
+                audit_results = audit_manager.run_full_audit(
+                    skip_wordpress=skip_wordpress,
+                    skip_lynis=skip_lynis,
+                    wpscan_api_token=api_token,
+                    verbose=verbose
+                )
+
+                if verbose:
+                    console.print("[green]✓[/green] Audit completed")
+        except KeyboardInterrupt:
+            print_warning("\nAudit interrupted by user")
+            ssh.disconnect()
+            raise typer.Exit(130)
+
+        # Check for errors
+        if audit_results.get('errors'):
+            print_warning(f"Audit completed with {len(audit_results['errors'])} error(s)")
+            if verbose:
+                for error in audit_results['errors']:
+                    print_error(f"  {error['component']}: {error['error']}")
+
+        # Generate report
+        if verbose:
+            console.print("\n[cyan]Generating report...[/cyan]")
+
+        report_content = audit_manager.generate_report(audit_results, format)
+
+        # Display or save report
+        if output:
+            # Save to file
+            output_path = Path(output).expanduser()
+            audit_manager.save_report(report_content, str(output_path), format)
+            print_success(f"Report saved to: {output_path}")
+
+            # Also show summary in console
+            if format != 'console':
+                console.print("\n[bold]Audit Summary:[/bold]")
+                console.print(f"Overall Score: [{_get_score_color_name(audit_results['overall_score'])}]{audit_results['overall_score']}/100[/]")
+                console.print(f"Timestamp: {audit_results['timestamp']}")
+
+                # Count findings by severity
+                all_findings = _collect_findings(audit_results)
+                critical = len([f for f in all_findings if f['severity'] == 'critical'])
+                high = len([f for f in all_findings if f['severity'] == 'high'])
+                medium = len([f for f in all_findings if f['severity'] == 'medium'])
+                low = len([f for f in all_findings if f['severity'] == 'low'])
+
+                console.print(f"\nFindings:")
+                if critical > 0:
+                    console.print(f"  [red]Critical: {critical}[/red]")
+                if high > 0:
+                    console.print(f"  [orange1]High: {high}[/orange1]")
+                if medium > 0:
+                    console.print(f"  [yellow]Medium: {medium}[/yellow]")
+                if low > 0:
+                    console.print(f"  [green]Low: {low}[/green]")
+
+        else:
+            # Display in console
+            if format == 'console':
+                console.print("\n")
+                console.print(report_content)
+            else:
+                # Non-console format without output path - print to stdout
+                print(report_content)
+
+        ssh.disconnect()
+
+    except Exception as e:
+        print_error(f"Security audit failed: {e}")
+        if verbose:
+            import traceback
+            console.print(f"[red]{traceback.format_exc()}[/red]")
+        raise typer.Exit(1)
+
+
+def _get_score_color_name(score: int) -> str:
+    """Get color name for score"""
+    if score >= 80:
+        return "green"
+    elif score >= 60:
+        return "yellow"
+    elif score >= 40:
+        return "orange1"
+    else:
+        return "red"
+
+
+def _collect_findings(audit_data: dict) -> list:
+    """Collect all findings from audit data"""
+    findings = []
+
+    # System findings
+    if 'system' in audit_data:
+        for category_data in audit_data['system'].values():
+            if isinstance(category_data, dict) and 'findings' in category_data:
+                findings.extend(category_data['findings'])
+
+    # WordPress findings
+    if 'wordpress' in audit_data:
+        if 'findings' in audit_data['wordpress']:
+            findings.extend(audit_data['wordpress']['findings'])
+        if 'sites' in audit_data['wordpress']:
+            for site_data in audit_data['wordpress']['sites'].values():
+                if 'findings' in site_data:
+                    findings.extend(site_data['findings'])
+
+    # Vulnerability findings
+    if 'vulnerabilities' in audit_data:
+        if 'findings' in audit_data['vulnerabilities']:
+            findings.extend(audit_data['vulnerabilities']['findings'])
+        if 'sites' in audit_data['vulnerabilities']:
+            for site_data in audit_data['vulnerabilities']['sites'].values():
+                if 'findings' in site_data:
+                    findings.extend(site_data['findings'])
+
+    return findings
+
+
+@app.command("set-wpscan-token")
+def set_wpscan_token(
+    token: str = typer.Argument(..., help="WPScan API token")
+):
+    """Configure WPScan API token for vulnerability scanning"""
+    try:
+        config = ConfigManager()
+        config.load_config()
+        config.set_wpscan_token(token)
+        print_success("WPScan API token saved to configuration")
+        print_info("Token will be used for vulnerability scanning in audit-server command")
+        console.print("[dim]Note: Get your free API token from https://wpscan.com/api[/dim]")
+
+    except Exception as e:
+        print_error(f"Failed to save token: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("clear-wpscan-token")
+def clear_wpscan_token():
+    """Remove WPScan API token from configuration"""
+    try:
+        config = ConfigManager()
+        config.load_config()
+        config.clear_wpscan_token()
+        print_success("WPScan API token removed from configuration")
+
+    except Exception as e:
+        print_error(f"Failed to clear token: {e}")
         raise typer.Exit(1)

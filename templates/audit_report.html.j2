@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Audit Report - {{ timestamp }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #1f2937;
+            background: #f9fafb;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header .timestamp {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .dashboard {
+            padding: 2rem;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .score-section {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .score-circle {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .severity-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .severity-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border-left: 4px solid;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .severity-card.critical {
+            border-left-color: #dc2626;
+        }
+
+        .severity-card.high {
+            border-left-color: #f97316;
+        }
+
+        .severity-card.medium {
+            border-left-color: #f59e0b;
+        }
+
+        .severity-card.low {
+            border-left-color: #3b82f6;
+        }
+
+        .severity-card h3 {
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #6b7280;
+            margin-bottom: 0.5rem;
+        }
+
+        .severity-card .count {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .severity-card.critical .count {
+            color: #dc2626;
+        }
+
+        .severity-card.high .count {
+            color: #f97316;
+        }
+
+        .severity-card.medium .count {
+            color: #f59e0b;
+        }
+
+        .severity-card.low .count {
+            color: #3b82f6;
+        }
+
+        .content {
+            padding: 2rem;
+        }
+
+        .section {
+            margin-bottom: 3rem;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.3s ease;
+        }
+
+        .section-header:hover {
+            opacity: 0.9;
+        }
+
+        .section-header.critical {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .section-header.high {
+            background: #fed7aa;
+            color: #9a3412;
+        }
+
+        .section-header.medium {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .section-header.low {
+            background: #dbeafe;
+            color: #1e3a8a;
+        }
+
+        .section-header h2 {
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge.critical {
+            background: #dc2626;
+            color: white;
+        }
+
+        .badge.high {
+            background: #f97316;
+            color: white;
+        }
+
+        .badge.medium {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .badge.low {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .findings-list {
+            display: none;
+            padding: 0 1rem;
+        }
+
+        .findings-list.active {
+            display: block;
+        }
+
+        .finding {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .finding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+
+        .finding-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 0.25rem;
+        }
+
+        .finding-id {
+            font-size: 0.875rem;
+            color: #6b7280;
+            font-family: 'Courier New', monospace;
+        }
+
+        .finding-category {
+            display: inline-block;
+            background: #f3f4f6;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #4b5563;
+            font-weight: 500;
+        }
+
+        .finding-detail {
+            margin-bottom: 0.75rem;
+        }
+
+        .finding-detail-label {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.25rem;
+        }
+
+        .finding-detail-value {
+            color: #6b7280;
+        }
+
+        .remediation {
+            background: #f0fdf4;
+            border-left: 3px solid #10b981;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 4px;
+        }
+
+        .remediation-label {
+            font-weight: 600;
+            color: #065f46;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .remediation-value {
+            color: #047857;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+        }
+
+        .auto-fix {
+            background: #eff6ff;
+            border-left: 3px solid #3b82f6;
+            padding: 1rem;
+            margin-top: 0.75rem;
+            border-radius: 4px;
+        }
+
+        .auto-fix-label {
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .auto-fix-value {
+            color: #1e3a8a;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+        }
+
+        .toggle-icon {
+            font-size: 1.5rem;
+            transition: transform 0.3s ease;
+        }
+
+        .toggle-icon.active {
+            transform: rotate(180deg);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #6b7280;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1rem;
+            color: #9ca3af;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .container {
+                box-shadow: none;
+            }
+
+            .section-header {
+                cursor: default;
+            }
+
+            .findings-list {
+                display: block !important;
+            }
+
+            .toggle-icon {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Security Audit Report</h1>
+            <div class="timestamp">Generated: {{ timestamp }}</div>
+        </div>
+
+        <div class="dashboard">
+            <div class="score-section">
+                <div class="score-circle" style="background: {{ score_color }};">
+                    {{ security_score }}
+                </div>
+                <h2>Security Score</h2>
+                <p style="color: #6b7280;">out of 100</p>
+            </div>
+
+            <div class="severity-summary">
+                <div class="severity-card critical">
+                    <h3>Critical</h3>
+                    <div class="count">{{ severity_counts.critical }}</div>
+                </div>
+                <div class="severity-card high">
+                    <h3>High</h3>
+                    <div class="count">{{ severity_counts.high }}</div>
+                </div>
+                <div class="severity-card medium">
+                    <h3>Medium</h3>
+                    <div class="count">{{ severity_counts.medium }}</div>
+                </div>
+                <div class="severity-card low">
+                    <h3>Low</h3>
+                    <div class="count">{{ severity_counts.low }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content">
+            {% if total_findings == 0 %}
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h2>No Security Issues Found</h2>
+                <p>Your system passed all security checks.</p>
+            </div>
+            {% else %}
+            {% for severity in ['critical', 'high', 'medium', 'low'] %}
+                {% set findings = findings_by_severity[severity] %}
+                {% if findings|length > 0 %}
+                <div class="section">
+                    <div class="section-header {{ severity }}" onclick="toggleSection('{{ severity }}')">
+                        <h2>
+                            <span class="badge {{ severity }}">{{ severity }}</span>
+                            {{ severity|upper }} Severity
+                            <span style="font-weight: normal; font-size: 0.9rem;">({{ findings|length }} findings)</span>
+                        </h2>
+                        <span class="toggle-icon" id="{{ severity }}-icon">▼</span>
+                    </div>
+                    <div class="findings-list" id="{{ severity }}-findings">
+                        {% for finding in findings %}
+                        <div class="finding">
+                            <div class="finding-header">
+                                <div>
+                                    <div class="finding-title">{{ finding.title }}</div>
+                                    <div class="finding-id">{{ finding.id }}</div>
+                                </div>
+                                <div class="finding-category">{{ finding.category }}</div>
+                            </div>
+
+                            <div class="finding-detail">
+                                <div class="finding-detail-label">Description</div>
+                                <div class="finding-detail-value">{{ finding.description }}</div>
+                            </div>
+
+                            <div class="finding-detail">
+                                <div class="finding-detail-label">Impact</div>
+                                <div class="finding-detail-value">{{ finding.impact }}</div>
+                            </div>
+
+                            <div class="remediation">
+                                <div class="remediation-label">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                    </svg>
+                                    Remediation
+                                </div>
+                                <div class="remediation-value">{{ finding.remediation }}</div>
+                            </div>
+
+                            {% if finding.auto_fix %}
+                            <div class="auto-fix">
+                                <div class="auto-fix-label">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="16 18 22 12 16 6"></polyline>
+                                        <polyline points="8 6 2 12 8 18"></polyline>
+                                    </svg>
+                                    Auto-fix Command
+                                </div>
+                                <div class="auto-fix-value">{{ finding.auto_fix }}</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        function toggleSection(severity) {
+            const findingsList = document.getElementById(severity + '-findings');
+            const icon = document.getElementById(severity + '-icon');
+
+            if (findingsList.classList.contains('active')) {
+                findingsList.classList.remove('active');
+                icon.classList.remove('active');
+            } else {
+                findingsList.classList.add('active');
+                icon.classList.add('active');
+            }
+        }
+
+        // Auto-expand critical and high severity sections on load
+        document.addEventListener('DOMContentLoaded', function() {
+            ['critical', 'high'].forEach(function(severity) {
+                const findingsList = document.getElementById(severity + '-findings');
+                const icon = document.getElementById(severity + '-icon');
+                if (findingsList) {
+                    findingsList.classList.add('active');
+                    icon.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

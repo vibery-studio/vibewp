@@ -22,6 +22,25 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  wpcli:
+    image: wordpress:cli
+    container_name: {{ site_name }}_wpcli
+    user: "33:33"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: {{ db_user }}
+      WORDPRESS_DB_PASSWORD: "{{ db_password }}"
+      WORDPRESS_DB_NAME: {{ db_name }}
+    volumes:
+      - wp_data:/var/www/html
+    networks:
+      - default
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: sh
+    command: -c "sleep infinity"
+
   db:
     image: mariadb:10.11
     container_name: {{ site_name }}_db

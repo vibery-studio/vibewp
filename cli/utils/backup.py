@@ -1,8 +1,13 @@
 """Backup and restore management utilities"""
 
 import os
+import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BackupManager:
@@ -22,6 +27,160 @@ class BackupManager:
 
         # Ensure backup directory exists
         self._ensure_backup_dir()
+
+    @staticmethod
+    def create_installation_backup(backup_name: Optional[str] = None) -> Path:
+        """
+        Create backup of VibeWP installation for update rollback.
+
+        Args:
+            backup_name: Optional backup name (defaults to timestamp)
+
+        Returns:
+            Path to backup directory
+
+        Raises:
+            RuntimeError: If backup creation fails
+        """
+        install_path = Path("/opt/vibewp")
+
+        if not install_path.exists():
+            raise RuntimeError(f"Installation path not found: {install_path}")
+
+        # Generate backup name
+        if backup_name is None:
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            backup_name = f"vibewp.backup.{timestamp}"
+
+        backup_path = install_path.parent / backup_name
+
+        try:
+            logger.info(f"Creating installation backup at {backup_path}")
+
+            # Create backup using atomic directory copy
+            # Note: shutil.copytree is atomic on most filesystems
+            if backup_path.exists():
+                shutil.rmtree(backup_path)
+
+            shutil.copytree(
+                install_path,
+                backup_path,
+                ignore=shutil.ignore_patterns(
+                    '__pycache__',
+                    '*.pyc',
+                    '.git',
+                    'backups',
+                    '*.egg-info'
+                )
+            )
+
+            # Verify backup integrity
+            if not BackupManager._verify_backup(backup_path):
+                raise RuntimeError("Backup verification failed")
+
+            logger.info(f"Installation backup created: {backup_path}")
+            return backup_path
+
+        except Exception as e:
+            logger.error(f"Failed to create installation backup: {e}")
+            if backup_path.exists():
+                shutil.rmtree(backup_path)
+            raise RuntimeError(f"Backup creation failed: {e}")
+
+    @staticmethod
+    def restore_installation_backup(backup_path: Path) -> bool:
+        """
+        Restore VibeWP installation from backup.
+
+        Args:
+            backup_path: Path to backup directory
+
+        Returns:
+            True if restore successful
+
+        Raises:
+            RuntimeError: If restore fails
+        """
+        install_path = Path("/opt/vibewp")
+
+        if not backup_path.exists():
+            raise RuntimeError(f"Backup not found: {backup_path}")
+
+        try:
+            logger.info(f"Restoring installation from {backup_path}")
+
+            # Atomic restore using rename
+            temp_path = install_path.parent / "vibewp.temp"
+
+            # Move current (broken) installation to temp
+            if install_path.exists():
+                shutil.move(str(install_path), str(temp_path))
+
+            # Move backup to installation path
+            shutil.move(str(backup_path), str(install_path))
+
+            # Remove temp (broken installation)
+            if temp_path.exists():
+                shutil.rmtree(temp_path)
+
+            logger.info("Installation restored successfully")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to restore installation: {e}")
+            raise RuntimeError(f"Restore failed: {e}")
+
+    @staticmethod
+    def cleanup_old_backups(keep_count: int = 3) -> None:
+        """
+        Cleanup old installation backups, keeping only the most recent.
+
+        Args:
+            keep_count: Number of backups to keep (default: 3)
+        """
+        backup_dir = Path("/opt")
+        backup_pattern = "vibewp.backup.*"
+
+        try:
+            # Find all backup directories
+            backups = sorted(
+                [p for p in backup_dir.glob(backup_pattern) if p.is_dir()],
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )
+
+            # Remove old backups
+            for backup in backups[keep_count:]:
+                logger.info(f"Removing old backup: {backup}")
+                shutil.rmtree(backup)
+
+        except Exception as e:
+            logger.warning(f"Failed to cleanup old backups: {e}")
+
+    @staticmethod
+    def _verify_backup(backup_path: Path) -> bool:
+        """
+        Verify backup integrity by checking key files exist.
+
+        Args:
+            backup_path: Path to backup directory
+
+        Returns:
+            True if backup is valid
+        """
+        required_files = [
+            "cli/__init__.py",
+            "cli/main.py",
+            "setup.py",
+            "requirements.txt"
+        ]
+
+        for file_path in required_files:
+            if not (backup_path / file_path).exists():
+                logger.error(f"Backup verification failed: missing {file_path}")
+                return False
+
+        return True
 
     def _ensure_backup_dir(self) -> None:
         """Create backup directory if it doesn't exist"""
