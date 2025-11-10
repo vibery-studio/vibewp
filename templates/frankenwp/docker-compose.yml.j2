@@ -7,11 +7,8 @@ services:
     environment:
       WORDPRESS_DB_HOST: db:3306
       WORDPRESS_DB_USER: {{ db_user }}
-      WORDPRESS_DB_PASSWORD: {{ db_password }}
+      WORDPRESS_DB_PASSWORD: "{{ db_password }}"
       WORDPRESS_DB_NAME: {{ db_name }}
-      WORDPRESS_CONFIG_EXTRA: |
-        define('WP_HOME', 'https://{{ domain }}');
-        define('WP_SITEURL', 'https://{{ domain }}');
     volumes:
       - wp_data:/var/www/html
     networks:
@@ -32,7 +29,7 @@ services:
     environment:
       MYSQL_DATABASE: {{ db_name }}
       MYSQL_USER: {{ db_user }}
-      MYSQL_PASSWORD: {{ db_password }}
+      MYSQL_PASSWORD: "{{ db_password }}"
       MYSQL_RANDOM_ROOT_PASSWORD: '1'
       # Performance tuning
       MYSQL_INITDB_SKIP_TZINFO: '1'
