@@ -34,10 +34,16 @@ apt-get install -y -qq git python3 python3-pip python3-venv curl
 
 # Clone repository
 INSTALL_DIR="/opt/vibewp"
-if [[ -d "$INSTALL_DIR" ]]; then
+if [[ -d "$INSTALL_DIR/.git" ]]; then
     log "Updating existing installation..."
     cd "$INSTALL_DIR"
     git pull -q
+elif [[ -d "$INSTALL_DIR" ]]; then
+    log "Removing incomplete installation..."
+    rm -rf "$INSTALL_DIR"
+    log "Cloning VibeWP repository..."
+    git clone -q https://github.com/vibery-studio/vibewp.git "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
 else
     log "Cloning VibeWP repository..."
     git clone -q https://github.com/vibery-studio/vibewp.git "$INSTALL_DIR"
