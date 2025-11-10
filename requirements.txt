@@ -1,6 +1,7 @@
 # CLI Framework
 typer[all]==0.12.5
 rich==13.7.1
+click>=8.0.0,<8.2.0  # Pin to <8.2 to avoid secondary flag validation issues
 
 # Interactive Menus
 simple-term-menu==1.6.4
