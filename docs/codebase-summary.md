@@ -29,6 +29,7 @@ vibewp/
 │   ├── vulnerability_scanner.py # WPScan API integration
 │   ├── report_generator.py      # Multi-format report generation
 │   ├── server_audit.py          # Audit orchestration
+│   ├── sftp.py                  # SFTP user management with chroot
 │   └── config.py                # Config with WPScan token support
 ├── config/            # Configuration management
 └── templates/         # Docker & config templates
@@ -53,6 +54,27 @@ vibewp/
   - `vibewp update cleanup` - Cleanup old backups
   - `vibewp update info` - Show install information
   - `vibewp --version` - Show version & install method
+
+### SFTP Access Management (NEW)
+- **Location**: `cli/commands/sftp.py`, `cli/utils/sftp.py`
+- **Components**:
+  - **SFTPManager** (`cli/utils/sftp.py`): Chroot jail setup, sshd_config management, ACL permissions
+- **Commands**:
+  - `vibewp sftp add-key <site> <pubkey> --id <name>` - Add SFTP access
+  - `vibewp sftp remove-key <site> <name>` - Remove access
+  - `vibewp sftp list [site]` - List SFTP users
+  - `vibewp sftp test <site> <name>` - Test configuration
+  - `vibewp sftp info` - Show usage guide
+- **Features**:
+  - SSH key authentication only (no passwords)
+  - Chroot jail restricts users to `/opt/vibewp/sftp/<username>/`
+  - Symlink/bind mount to site's wp-content (Docker volume)
+  - ForceCommand internal-sftp (no shell access)
+  - ACLs for www-data group write permissions
+  - Dynamic sshd_config Match User directives
+  - User format: `sftp_<site>_<identifier>`
+  - Site-specific access - users cannot see other sites
+  - Full read/write access to WordPress files
 
 ### Security Audit System
 - **Location**: `cli/commands/security.py`, `cli/utils/server_audit.py`
@@ -146,6 +168,7 @@ The update system automatically detects the installation method and applies upda
 - 32-character database passwords
 - Network isolation per site
 - Automatic HTTPS (Let's Encrypt)
+- SFTP access with site-specific chroot restrictions
 - Comprehensive security auditing:
   - System-level: SSH, firewall, fail2ban, ports, services, users, updates, logs, filesystem
   - WordPress: Core, plugins, themes, users, wp-config.php, file permissions
