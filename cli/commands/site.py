@@ -56,6 +56,7 @@ def create_site(
     wp_type: Optional[str] = typer.Option(None, help="WordPress type (frankenwp/ols)"),
     admin_email: Optional[str] = typer.Option(None, help="Admin email"),
     site_title: Optional[str] = typer.Option(None, help="Site title"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
     """Create a new WordPress site"""
 
@@ -107,7 +108,7 @@ def create_site(
         console.print(f"  Site Title: {site_title}\n")
 
         # Confirm
-        if not typer.confirm("Proceed with site creation?", default=True):
+        if not yes and not typer.confirm("Proceed with site creation?", default=True):
             print_info("Site creation cancelled")
             raise typer.Exit(code=0)
 
