@@ -65,9 +65,82 @@ log "Creating global command..."
 ln -sf "$INSTALL_DIR/venv/bin/vibewp" /usr/local/bin/vibewp
 chmod +x /usr/local/bin/vibewp
 
+# Setup SSH key for localhost access (needed for Docker management)
+log "Configuring SSH for localhost access..."
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+touch ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+
+if [[ ! -f ~/.ssh/id_rsa ]]; then
+    ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N "" -C "vibewp-localhost" -q
+    cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+    log "✓ SSH key generated and authorized"
+else
+    # Ensure key is authorized
+    if ! grep -q "$(cat ~/.ssh/id_rsa.pub)" ~/.ssh/authorized_keys 2>/dev/null; then
+        cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+    fi
+    log "✓ SSH key already configured"
+fi
+
+# Test localhost SSH (add to known_hosts)
+ssh-keyscan -H localhost >> ~/.ssh/known_hosts 2>/dev/null || true
+
+# Check if Docker is installed
+if ! command -v docker &> /dev/null; then
+    warn "Docker not found. Please install Docker first:"
+    warn "  curl -fsSL https://get.docker.com | sh"
+    warn "  systemctl start docker && systemctl enable docker"
+else
+    log "✓ Docker is installed"
+
+    # Create proxy network if it doesn't exist
+    if ! docker network ls | grep -q "proxy"; then
+        log "Creating proxy network..."
+        docker network create proxy >/dev/null 2>&1 || true
+        log "✓ Proxy network created"
+    else
+        log "✓ Proxy network already exists"
+    fi
+
+    # Deploy Caddy proxy if not running
+    if ! docker ps | grep -q caddy_proxy; then
+        log "Deploying Caddy reverse proxy..."
+        cd "$INSTALL_DIR"
+        docker compose -f templates/caddy/docker-compose.yml up -d >/dev/null 2>&1 || warn "Failed to deploy Caddy (will retry later)"
+    else
+        log "✓ Caddy proxy already running"
+    fi
+fi
+
 # Initialize config directory
 mkdir -p ~/.vibewp
 chmod 700 ~/.vibewp
+
+# Create initial config if it doesn't exist
+if [[ ! -f ~/.vibewp/sites.yaml ]]; then
+    log "Creating initial configuration..."
+    cat > ~/.vibewp/sites.yaml << 'CONFIGEOF'
+vps:
+  host: localhost
+  port: 22
+  user: root
+  key_path: ~/.ssh/id_rsa
+wordpress:
+  default_admin_email: admin@example.com
+  default_timezone: UTC
+  default_locale: en_US
+docker:
+  base_path: /opt/vibewp
+  network_name: proxy
+sites: []
+CONFIGEOF
+    chmod 600 ~/.vibewp/sites.yaml
+    log "✓ Configuration initialized"
+else
+    log "✓ Configuration already exists"
+fi
 
 # Verify installation
 if command -v vibewp &> /dev/null; then
@@ -75,8 +148,8 @@ if command -v vibewp &> /dev/null; then
     log "✓ VibeWP $VERSION installed successfully!"
     echo ""
     echo "Next steps:"
-    echo "  1. Initialize configuration: vibewp config init"
-    echo "  2. Edit VPS settings: vibewp config show"
+    echo "  1. Test SSH connection: vibewp test-ssh"
+    echo "  2. View configuration: vibewp config show"
     echo "  3. Create your first site: vibewp site create"
     echo ""
     echo "For help: vibewp --help"
