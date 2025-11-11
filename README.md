@@ -16,12 +16,12 @@ Complete CLI tool for managing WordPress sites on VPS with automatic HTTPS, Dock
 
 **Interactive Menu Walkthrough**
 
-https://github.com/vibery-studio/vibewp/assets/material/vibewp.mp4
+[![VibeWP Demo](https://img.youtube.com/vi/Hg6WdRpeMLc/maxresdefault.jpg)](https://youtube.com/shorts/Hg6WdRpeMLc)
 
-*Full menu navigation showing site management, domains, security, backups, and more*
+*Click to watch: Full menu navigation showing site management, domains, security, backups, and more*
 
 <details>
-<summary>📸 Menu Screenshot</summary>
+<summary>📸 Full Menu Screenshot</summary>
 
 ![VibeWP Interactive Menu](material/vibewp-menu-screenshot.jpeg)
 
