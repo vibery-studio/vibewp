@@ -12,6 +12,21 @@ Complete CLI tool for managing WordPress sites on VPS with automatic HTTPS, Dock
 - 📦 **Complete operations** - Backups, monitoring, security scanning
 - 🎨 **Interactive UI** - Beautiful CLI with arrow-key menus
 
+## 🎬 See It In Action
+
+**Interactive Menu Walkthrough**
+
+https://github.com/vibery-studio/vibewp/assets/material/vibewp.mp4
+
+*Full menu navigation showing site management, domains, security, backups, and more*
+
+<details>
+<summary>📸 Menu Screenshot</summary>
+
+![VibeWP Interactive Menu](material/vibewp-menu-screenshot.jpeg)
+
+</details>
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -347,6 +362,53 @@ MIT License - See LICENSE file
 - **Issues**: https://github.com/vibery-studio/vibewp/issues
 - **Docs**: https://github.com/vibery-studio/vibewp/wiki
 - **Discord**: Coming soon
+
+## 🔧 Under the Hood
+
+VibeWP leverages cutting-edge containerization and web server technologies:
+
+### Core Technologies
+
+**Container Infrastructure**
+- 🐳 **Docker** - Isolated environments per WordPress site
+- 🔌 **Docker Compose v2** - Orchestration and networking
+- 🌐 **Caddy v2** - Reverse proxy with automatic HTTPS (Let's Encrypt)
+
+**WordPress Engines (Choose per site)**
+
+**FrankenWP** (Speed-optimized)
+- ⚡ **FrankenPHP** - WordPress running on native Go PHP SAPI
+- 📦 **Early Hints** - HTTP 103 for faster page loads
+- 🔥 **Worker Mode** - Keep WordPress in memory between requests
+- 🗄️ **MariaDB 11** - High-performance database
+
+**OpenLiteSpeed** (Enterprise-grade)
+- 🚀 **OpenLiteSpeed** - LiteSpeed's open-source web server
+- ⚡ **LSCache** - Built-in full-page caching + object cache
+- 🔴 **Redis** - Session and object caching
+- 🗄️ **MariaDB 11** - Optimized for OLS
+- 🎯 **PHP 8.3** - Latest PHP with JIT compiler
+
+### Network Architecture
+
+```
+Internet
+    ↓
+Caddy Reverse Proxy (Port 80/443)
+    ├── Auto HTTPS/SSL via Let's Encrypt
+    ├── HTTP/2 & HTTP/3 support
+    └── Routes to isolated networks
+         ├── site1_network → FrankenWP + MariaDB
+         ├── site2_network → OLS + Redis + MariaDB
+         └── site3_network → ...
+```
+
+**Security Layers**
+- 🔐 Network isolation per site
+- 🔥 UFW firewall integration
+- 🛡️ fail2ban protection
+- 🔑 SSH key-only authentication
+- 📁 Chroot SFTP jails (wp-content only)
 
 ## 🎯 Roadmap
 
