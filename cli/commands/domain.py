@@ -6,7 +6,8 @@ from typing import Optional
 from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from simple_term_menu import TerminalMenu
+import questionary
+from questionary import Style
 
 from cli.utils.config import ConfigManager
 from cli.utils.ssh import SSHManager
@@ -17,6 +18,14 @@ from cli.ui.console import print_success, print_error, print_info, print_warning
 
 console = Console()
 app = typer.Typer(help="Domain management commands")
+
+# Menu style matching VibeWP theme
+MENU_STYLE = Style([
+    ('qmark', 'fg:cyan bold'),
+    ('question', 'fg:cyan bold'),
+    ('pointer', 'fg:cyan bold'),
+    ('highlighted', 'bg:cyan fg:black'),
+])
 
 
 @app.command("refresh-ssl")
@@ -128,17 +137,18 @@ def manage_domains():
 
         # Select site
         site_names = [f"{site.name} ({site.domain})" for site in sites]
-        menu = TerminalMenu(
-            site_names,
-            title="Select site to manage domains:",
-            menu_cursor="→ ",
-            menu_cursor_style=("fg_cyan", "bold"),
-            menu_highlight_style=("bg_cyan", "fg_black")
-        )
-        choice = menu.show()
+        answer = questionary.select(
+            "Select site to manage domains:",
+            choices=site_names,
+            style=MENU_STYLE,
+            use_arrow_keys=True,
+            instruction=""
+        ).ask()
 
-        if choice is None:
+        if answer is None:
             return
+
+        choice = site_names.index(answer)
 
         selected_site = sites[choice]
         domain_menu(selected_site)
@@ -189,14 +199,18 @@ def domain_menu(site):
                     "🔙 Back"
                 ]
 
-                menu = TerminalMenu(
-                    options,
-                    title="Domain Operations:",
-                    menu_cursor="→ ",
-                    menu_cursor_style=("fg_cyan", "bold"),
-                    menu_highlight_style=("bg_cyan", "fg_black")
-                )
-                choice = menu.show()
+                answer = questionary.select(
+                    "Domain Operations:",
+                    choices=options,
+                    style=MENU_STYLE,
+                    use_arrow_keys=True,
+                    instruction=""
+                ).ask()
+
+                if answer is None or answer == "🔙 Back":
+                    break
+
+                choice = options.index(answer)
 
                 if choice == 0:
                     add_domain(site, caddy, ssh, config)
@@ -301,17 +315,18 @@ def remove_domain(site, caddy: CaddyManager, ssh: SSHManager, config: ConfigMana
             return
 
         # Select domain to remove
-        menu = TerminalMenu(
-            domains,
-            title="Select domain to remove:",
-            menu_cursor="→ ",
-            menu_cursor_style=("fg_cyan", "bold"),
-            menu_highlight_style=("bg_cyan", "fg_black")
-        )
-        choice = menu.show()
+        answer = questionary.select(
+            "Select domain to remove:",
+            choices=domains,
+            style=MENU_STYLE,
+            use_arrow_keys=True,
+            instruction=""
+        ).ask()
 
-        if choice is None:
+        if answer is None:
             return
+
+        choice = domains.index(answer)
 
         domain_to_remove = domains[choice]
 
@@ -359,19 +374,18 @@ def set_primary_domain(site, caddy: CaddyManager, ssh: SSHManager, config: Confi
         domains = caddy.get_site_domains(site.name)
 
         # Select new primary domain
-        menu = TerminalMenu(
-            domains,
-            title="Select new primary domain:",
-            menu_cursor="→ ",
-            menu_cursor_style=("fg_cyan", "bold"),
-            menu_highlight_style=("bg_cyan", "fg_black")
-        )
-        choice = menu.show()
+        answer = questionary.select(
+            "Select new primary domain:",
+            choices=domains,
+            style=MENU_STYLE,
+            use_arrow_keys=True,
+            instruction=""
+        ).ask()
 
-        if choice is None:
+        if answer is None:
             return
 
-        new_primary = domains[choice]
+        new_primary = answer
 
         # Check if already primary
         if new_primary == site.domain:

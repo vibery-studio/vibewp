@@ -1,6 +1,7 @@
 """Interactive menu system for VibeWP CLI"""
 
-from simple_term_menu import TerminalMenu
+import questionary
+from questionary import Style
 from cli.ui.console import (
     console,
     print_banner,
@@ -10,6 +11,16 @@ from cli.ui.console import (
     confirm
 )
 from typing import Optional, Callable, List
+
+# Custom style matching VibeWP theme
+MENU_STYLE = Style([
+    ('qmark', 'fg:cyan bold'),
+    ('question', 'fg:cyan bold'),
+    ('answer', 'fg:cyan bold'),
+    ('pointer', 'fg:cyan bold'),
+    ('highlighted', 'bg:cyan fg:black'),
+    ('selected', 'fg:cyan'),
+])
 
 
 class MenuOption:
@@ -61,25 +72,31 @@ class Menu:
         if self.show_back:
             menu_items.append("← Back")
 
-        # Create terminal menu
-        terminal_menu = TerminalMenu(
-            menu_items,
-            title=self.title,
-            menu_cursor="→ ",
-            menu_cursor_style=("fg_cyan", "bold"),
-            menu_highlight_style=("bg_cyan", "fg_black"),
-            cycle_cursor=True,
-            clear_screen=True
-        )
+        try:
+            # Show menu with questionary
+            answer = questionary.select(
+                self.title,
+                choices=menu_items,
+                style=MENU_STYLE,
+                use_arrow_keys=True,
+                instruction=""
+            ).ask()
 
-        # Show menu
-        selection = terminal_menu.show()
+            # Handle cancellation
+            if answer is None:
+                return None
 
-        # Handle back option
-        if self.show_back and selection == len(self.options):
+            # Find selected index
+            selection = menu_items.index(answer)
+
+            # Handle back option
+            if self.show_back and selection == len(self.options):
+                return None
+
+            return selection
+
+        except KeyboardInterrupt:
             return None
-
-        return selection
 
     def run(self) -> None:
         """Run menu loop"""
