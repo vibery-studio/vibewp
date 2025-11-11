@@ -16,13 +16,15 @@ Complete CLI tool for managing WordPress sites on VPS with automatic HTTPS, Dock
 
 ### Prerequisites
 
+**Before installing VibeWP, ensure you have:**
+
 1. **Fresh Ubuntu VPS** (22.04 or 24.04 LTS)
-2. **Docker installed**:
-   ```bash
-   curl -fsSL https://get.docker.com | sh
-   systemctl start docker && systemctl enable docker
-   ```
-3. **Domain DNS** pointed to your VPS IP
+2. **Docker Engine installed and running** (20.10+)
+   - VibeWP requires Docker to be pre-installed
+   - Install Docker: `curl -fsSL https://get.docker.com | sh`
+   - Enable Docker: `systemctl start docker && systemctl enable docker`
+3. **Root or sudo access** to the VPS
+4. **Domain DNS** pointed to your VPS IP address
 
 ### One-Line Install
 
@@ -30,12 +32,12 @@ Complete CLI tool for managing WordPress sites on VPS with automatic HTTPS, Dock
 curl -fsSL https://raw.githubusercontent.com/vibery-studio/vibewp/main/install.sh | sudo bash
 ```
 
-**What this does automatically:**
-- ✅ Installs VibeWP CLI
-- ✅ Generates SSH keys for localhost access
+**What this installer does:**
+- ✅ Installs VibeWP CLI (Python package)
+- ✅ Generates SSH keys for localhost Docker access
 - ✅ Creates Docker proxy network
-- ✅ Deploys Caddy reverse proxy
-- ✅ Initializes configuration
+- ✅ Deploys Caddy reverse proxy container
+- ✅ Initializes configuration files
 
 ### Create Your First Site
 
@@ -64,43 +66,90 @@ No manual WordPress setup form required!
 
 ### Site Management
 ```bash
-vibewp site create              # Create new WordPress site
-vibewp site list                # List all sites
-vibewp site info <name>         # Site details
-vibewp site delete <name>       # Remove site
-vibewp site logs <name>         # View logs
+vibewp site create                      # Create new WordPress site (interactive)
+vibewp site list                        # List all sites
+vibewp site info <name>                 # Show site details
+vibewp site start <name>                # Start site containers
+vibewp site stop <name>                 # Stop site containers
+vibewp site restart <name>              # Restart site containers
+vibewp site delete <name>               # Remove site completely
+vibewp site logs <name>                 # View container logs
 ```
 
 ### Domain Management
 ```bash
-vibewp domain add <site> <domain>       # Add domain
-vibewp domain remove <site> <domain>    # Remove domain
-vibewp domain set-primary <site>        # Change primary
-vibewp domain ssl-status <site>         # SSL certificates
+vibewp domain add <site> <domain>       # Add domain to site
+vibewp domain remove <site> <domain>    # Remove domain from site
+vibewp domain set-primary <site>        # Change primary domain
+vibewp domain list <site>               # List all domains
+vibewp domain ssl-status <site>         # Check SSL certificate status
 ```
 
-### VPS Operations
+### Security & VPS Operations
 ```bash
-vibewp firewall list|open|close         # Firewall control
-vibewp ssh change-port <port>           # SSH configuration
-vibewp security scan                    # Basic security audit
-vibewp security audit-server            # Full server audit (system + WP + vulnerabilities)
-vibewp system status                    # Resource usage
-vibewp backup create <site>             # Backup site
+# Security Commands
+vibewp security scan                    # Basic security scan
+vibewp security audit-server            # Full server security audit
+vibewp security set-wpscan-token        # Configure WPScan API token
+vibewp security harden-vps              # Apply VPS security hardening
+vibewp security harden-wp <site>        # Apply WordPress security hardening
+
+# Firewall Management
+vibewp firewall list                    # List firewall rules
+vibewp firewall open <port>             # Open firewall port
+vibewp firewall close <port>            # Close firewall port
+
+# SSH Configuration
+vibewp ssh change-port <port>           # Change SSH port safely
+
+# System Monitoring
+vibewp system status                    # Show resource usage
+vibewp doctor check                     # Run system diagnostics
+```
+
+### Backup & Recovery
+```bash
+vibewp backup create <site>             # Create site backup
+vibewp backup restore <site> <backup>   # Restore from backup
+vibewp backup list <site>               # List available backups
+```
+
+### SFTP Access
+```bash
+vibewp sftp add-key <site> <pub-key>    # Grant SFTP access
+vibewp sftp remove-key <site> <id>      # Revoke SFTP access
+vibewp sftp list [site]                 # List SFTP users
+vibewp sftp test <site> <id>            # Test SFTP connection
+vibewp sftp info                        # Show SFTP configuration
+```
+
+### Proxy & PHP Management
+```bash
+vibewp proxy reload                     # Reload Caddy configuration
+vibewp proxy status                     # Check proxy status
+vibewp php list-versions                # List available PHP versions
+vibewp php switch <site> <version>      # Switch PHP version
 ```
 
 ### Self-Update Management
 ```bash
-vibewp update check                     # Check for new version
-vibewp update install                   # Install latest version
-vibewp update cleanup                   # Cleanup old backups
-vibewp update info                      # Show install method
+vibewp update check [--pre]             # Check for new version
+vibewp update install [--pre] [--yes]   # Install latest version
+vibewp update cleanup [--keep 3]        # Cleanup old backups
+vibewp update info                      # Show installation details
 vibewp --version                        # Show version & install method
 ```
 
 ### Interactive Menu
 ```bash
-vibewp menu     # Launch full interactive UI
+vibewp menu                             # Launch full interactive UI
+```
+
+### Configuration
+```bash
+vibewp config init                      # Initialize configuration
+vibewp config show                      # Display current config
+vibewp config path                      # Show config file location
 ```
 
 ## 🏗️ Architecture
@@ -127,11 +176,18 @@ Caddy Reverse Proxy (Auto HTTPS)
 
 ## 📦 What Gets Installed
 
-- **Python 3.10+** with virtual environment
-- **Docker Engine** + Docker Compose v2
-- **Caddy** reverse proxy
-- **UFW** firewall (optional, via VPS setup)
-- **fail2ban** (optional, via VPS setup)
+The VibeWP installer sets up:
+
+- **VibeWP CLI** (Python package with all dependencies)
+- **Caddy reverse proxy** (Docker container for auto-HTTPS)
+- **Docker networks** (isolated networking per site)
+- **Configuration files** (`~/.vibewp/`)
+
+**Not included (must be pre-installed):**
+- Docker Engine 20.10+ (prerequisite)
+- Python 3.10+ (usually pre-installed on Ubuntu)
+- UFW firewall (managed via VibeWP commands)
+- fail2ban (optional, can be installed via `apt`)
 
 ## 🎓 Usage Examples
 
@@ -294,6 +350,16 @@ MIT License - See LICENSE file
 
 ## 🎯 Roadmap
 
+### Completed ✅
+- [x] Self-update system with rollback
+- [x] SFTP access management
+- [x] Security auditing (server + WordPress)
+- [x] PHP version switching
+- [x] System diagnostics (doctor command)
+
+### Planned 🚧
+- [ ] VPS security hardening automation
+- [ ] WordPress security hardening
 - [ ] Multi-VPS management
 - [ ] Site cloning
 - [ ] Automated backups to S3/R2
