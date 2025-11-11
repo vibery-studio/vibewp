@@ -69,7 +69,7 @@ class Menu:
             menu_cursor_style=("fg_cyan", "bold"),
             menu_highlight_style=("bg_cyan", "fg_black"),
             cycle_cursor=True,
-            clear_screen=False
+            clear_screen=True
         )
 
         # Show menu
@@ -224,7 +224,8 @@ def delete_site_action():
             title="Select site to delete:",
             menu_cursor="→ ",
             menu_cursor_style=("fg_cyan", "bold"),
-            menu_highlight_style=("bg_cyan", "fg_black")
+            menu_highlight_style=("bg_cyan", "fg_black"),
+            clear_screen=True
         )
         choice = menu.show()
 
@@ -328,7 +329,8 @@ def select_from_list(
         menu_cursor="→ ",
         menu_cursor_style=("fg_cyan", "bold"),
         menu_highlight_style=("bg_cyan", "fg_black"),
-        cycle_cursor=True
+        cycle_cursor=True,
+        clear_screen=True
     )
 
     selection = terminal_menu.show()
@@ -523,7 +525,8 @@ def view_logs_interactive():
         service_menu = TerminalMenu(
             services,
             title="Select log to view:",
-            menu_cursor="→ "
+            menu_cursor="→ ",
+            clear_screen=True
         )
         choice = service_menu.show()
 
@@ -554,7 +557,8 @@ def create_backup_interactive():
         site_menu = TerminalMenu(
             site_names,
             title="Select site to backup:",
-            menu_cursor="→ "
+            menu_cursor="→ ",
+            clear_screen=True
         )
         choice = site_menu.show()
 
@@ -591,7 +595,8 @@ def restore_backup_interactive():
         backup_menu = TerminalMenu(
             backup_labels,
             title="Select backup to restore:",
-            menu_cursor="→ "
+            menu_cursor="→ ",
+            clear_screen=True
         )
         choice = backup_menu.show()
 
@@ -629,7 +634,8 @@ def delete_backup_interactive():
         backup_menu = TerminalMenu(
             backup_labels,
             title="Select backup to delete:",
-            menu_cursor="→ "
+            menu_cursor="→ ",
+            clear_screen=True
         )
         choice = backup_menu.show()
 
