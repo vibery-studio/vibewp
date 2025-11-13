@@ -174,7 +174,6 @@ def create_site(
                     raise typer.Exit(code=1)
 
                 # Wait for Caddy to start
-                import time
                 time.sleep(2)
 
                 caddy_container = docker_mgr.get_container("caddy_proxy")

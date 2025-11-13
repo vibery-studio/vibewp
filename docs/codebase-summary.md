@@ -1,6 +1,6 @@
 # VibeWP Codebase Summary
 
-**Version**: 1.0.0 | **Last Updated**: 2025-11-10
+**Version**: 1.3.1 | **Last Updated**: 2025-11-11
 
 ## Overview
 
@@ -179,11 +179,57 @@ The update system automatically detects the installation method and applies upda
   - Auto-fix suggestions
   - Multi-format reports
 
+## VibeCLI Boilerplate Extraction (NEW)
+
+**Date:** 2025-11-11
+**Location:** `/Applications/MAMP/htdocs/utils/vibecli/`
+**Status:** ✅ Complete
+
+### What Was Extracted
+Generic CLI framework (1,600+ lines) extracted from VibeWP into reusable boilerplate:
+
+**Components:**
+- **core/** - App creation, command registration, version management (SemVer)
+- **ui/** - Rich console utilities, Questionary menus, theme system
+- **config/** - Pydantic models, YAML persistence, ConfigManager
+- **utils/** - Validators (email, domain, IP, port), Jinja2 template rendering
+- **templates/** - Project scaffolding templates
+- **examples/** - Working hello_cli example (260 lines)
+
+**Stack:**
+- Typer 0.12.5, Rich 13.7.1, Questionary 2.0.1
+- Pydantic 2.9.2, PyYAML 6.0.2, Jinja2 3.1.4
+
+**Quality:**
+- Grade A (code-reviewer assessment)
+- 100% type hint coverage
+- Security best practices (0o600 permissions, atomic writes)
+- Zero critical/high priority issues
+- Production-ready
+
+**What Was Removed:**
+- All VibeWP-specific code (SSH, Docker, WordPress utilities)
+- Domain-specific config models
+- Business logic and VPS operations
+
+**Use Cases:**
+- Rapid CLI tool development (<5 min to working app)
+- Reusable patterns for new projects
+- Potential PyPI package publication
+
+**Migration Path:**
+VibeWP can optionally refactor to use VibeCLI for generic UI/config patterns while keeping domain-specific code separate.
+
+**Documentation:**
+- README.md (8,708 lines) - API reference
+- EXTRACTION_REPORT.md - Methodology
+- CODE_REVIEW_REPORT.md - Quality assessment
+
 ## Development
 
 - **Language**: Python 3.10+
 - **Test Framework**: pytest
-- **CLI Framework**: Click
+- **CLI Framework**: Typer (formerly Click)
 - **Container**: Docker & Docker Compose v2
 - **Config Format**: YAML
 

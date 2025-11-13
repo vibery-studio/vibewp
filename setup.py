@@ -7,7 +7,7 @@ with open("requirements.txt") as f:
 
 setup(
     name="vibewp",
-    version="1.0.0",
+    version="1.4.1",
     description="VPS WordPress Manager - CLI for managing WordPress sites on VPS",
     author="VibeWP Team",
     packages=find_packages(),

@@ -124,9 +124,12 @@ vibewp doctor check                     # Run system diagnostics
 
 ### Backup & Recovery
 ```bash
-vibewp backup create <site>             # Create site backup
-vibewp backup restore <site> <backup>   # Restore from backup
-vibewp backup list <site>               # List available backups
+vibewp backup create <site>                    # Create local backup
+vibewp backup create <site> --remote           # Create backup + upload to S3
+vibewp backup restore <site> <backup>          # Restore from backup
+vibewp backup list <site>                      # List local backups
+vibewp backup list-remote [--site <name>]      # List remote S3 backups
+vibewp backup configure-remote                 # Setup S3-compatible storage
 ```
 
 ### SFTP Access
@@ -204,6 +207,9 @@ The VibeWP installer sets up:
 - UFW firewall (managed via VibeWP commands)
 - fail2ban (optional, can be installed via `apt`)
 
+**Optional (auto-installed when needed):**
+- rclone (for remote S3 backups, installed via `vibewp backup configure-remote`)
+
 ## 🎓 Usage Examples
 
 ### Create FrankenWP Site
@@ -280,6 +286,34 @@ sftp sftp_mysite_john@your-server.com
 - No shell access - SFTP only
 - Cannot navigate outside wp-content
 - Cannot access other sites
+
+### Setup Remote Backups to S3
+
+Configure S3-compatible storage for automatic backup uploads:
+
+```bash
+# Configure remote storage (interactive setup)
+vibewp backup configure-remote
+
+# Create backup and upload to S3
+vibewp backup create mysite --remote
+
+# List remote backups
+vibewp backup list-remote --site mysite
+```
+
+**Supported providers**:
+- AWS S3 (standard S3)
+- Cloudflare R2 (zero egress fees)
+- Backblaze B2 (affordable storage)
+- Any S3-compatible storage
+
+**Features**:
+- Automatic rclone installation and configuration
+- Client-side encryption support
+- Configurable retention policies
+- Automatic cleanup of old backups
+- Parallel transfer for speed
 
 ## 🔧 Configuration
 
@@ -418,13 +452,14 @@ Caddy Reverse Proxy (Port 80/443)
 - [x] Security auditing (server + WordPress)
 - [x] PHP version switching
 - [x] System diagnostics (doctor command)
+- [x] Remote backups to S3-compatible storage (rclone)
 
 ### Planned 🚧
 - [ ] VPS security hardening automation
 - [ ] WordPress security hardening
 - [ ] Multi-VPS management
 - [ ] Site cloning
-- [ ] Automated backups to S3/R2
+- [ ] Automated scheduled backups
 - [ ] Monitoring dashboard
 - [ ] Email notifications
 - [ ] CDN integration

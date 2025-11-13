@@ -30,6 +30,36 @@ class WordPressConfig(BaseModel):
     default_locale: str = "en_US"
 
 
+class RemoteBackupConfig(BaseModel):
+    """Remote backup configuration for S3-compatible storage"""
+    enabled: bool = False
+    provider: str = "s3"  # s3, r2, b2, etc.
+    endpoint: Optional[str] = None  # S3 endpoint URL
+    bucket: str = ""
+    region: Optional[str] = None
+    access_key: str = ""
+    secret_key: str = ""
+    encryption: bool = True  # Encrypt backups before upload
+    retention_days: int = 30  # Keep backups for N days
+
+    @validator('bucket', 'access_key', 'secret_key')
+    def validate_required_when_enabled(cls, v, values):
+        """Validate that required fields are not empty when remote backup is enabled"""
+        # Only validate if enabled=True (values may not have 'enabled' yet during construction)
+        if values.get('enabled', False) and not v:
+            raise ValueError('bucket, access_key, and secret_key are required when remote backup is enabled')
+        return v
+
+    @validator('retention_days')
+    def validate_retention(cls, v):
+        """Validate retention days is reasonable"""
+        if v < 0:
+            raise ValueError('retention_days must be >= 0 (0 means no auto-cleanup)')
+        if v > 3650:  # 10 years
+            raise ValueError('retention_days cannot exceed 3650 days (10 years)')
+        return v
+
+
 class DockerConfig(BaseModel):
     """Docker configuration"""
     base_path: str = "/opt/vibewp"
@@ -67,6 +97,7 @@ class VibeWPConfig(BaseModel):
     vps: VPSConfig
     wordpress: WordPressConfig = Field(default_factory=WordPressConfig)
     docker: DockerConfig = Field(default_factory=DockerConfig)
+    remote_backup: RemoteBackupConfig = Field(default_factory=RemoteBackupConfig)
     sites: List[SiteConfig] = Field(default_factory=list)
 
 
@@ -106,6 +137,15 @@ class ConfigManager:
                         'base_path': '/opt/vibewp',
                         'network_name': 'proxy'
                     },
+                    'remote_backup': {
+                        'enabled': False,
+                        'provider': 's3',
+                        'bucket': '',
+                        'access_key': '',
+                        'secret_key': '',
+                        'encryption': True,
+                        'retention_days': 30
+                    },
                     'sites': []
                 }
             else:
@@ -125,6 +165,15 @@ class ConfigManager:
                     'docker': {
                         'base_path': '/opt/vibewp',
                         'network_name': 'proxy'
+                    },
+                    'remote_backup': {
+                        'enabled': False,
+                        'provider': 's3',
+                        'bucket': '',
+                        'access_key': '',
+                        'secret_key': '',
+                        'encryption': True,
+                        'retention_days': 30
                     },
                     'sites': []
                 }

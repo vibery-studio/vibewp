@@ -40,7 +40,8 @@ class DoctorChecker:
             "ssh": "SSH Configuration",
             "config": "VibeWP Configuration",
             "network": "Network & Connectivity",
-            "permissions": "File Permissions"
+            "permissions": "File Permissions",
+            "backup": "Backup Tools"
         }
 
     def add_check(self, check: HealthCheck):
@@ -80,6 +81,9 @@ class DoctorChecker:
         # Permission checks
         self.check_config_permissions()
         self.check_docker_permissions()
+
+        # Backup checks
+        self.check_rclone()
 
         passed = sum(1 for c in self.checks if c.passed)
         total = len(self.checks)
@@ -478,6 +482,46 @@ class DoctorChecker:
                 )
         except Exception as e:
             check.fail(f"Error: {e}", "Check Docker permissions")
+        self.add_check(check)
+
+    def check_rclone(self):
+        """Check if rclone is installed on VPS for remote backups"""
+        check = HealthCheck("rclone (Remote Backup)", "backup")
+        ssh = None
+        try:
+            from cli.utils.ssh import SSHManager
+            from cli.utils.config import ConfigManager
+
+            # Load config to check if remote backup is enabled
+            config_mgr = ConfigManager()
+            config = config_mgr.load_config()
+
+            if not config.remote_backup.enabled:
+                check.success("Not configured (optional)")
+                self.add_check(check)
+                return
+
+            # Check on VPS
+            ssh = SSHManager.from_config()
+            ssh.connect()
+
+            exit_code, _, _ = ssh.run_command("which rclone")
+
+            if exit_code == 0:
+                check.success("Installed on VPS")
+            else:
+                check.fail(
+                    "Not installed on VPS",
+                    "Install automatically via: vibewp backup configure-remote"
+                )
+        except Exception as e:
+            check.fail(f"Error: {e}", "Check VPS connection and configuration")
+        finally:
+            if ssh:
+                try:
+                    ssh.disconnect()
+                except:
+                    pass
         self.add_check(check)
 
     def print_report(self):

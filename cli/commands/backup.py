@@ -5,6 +5,8 @@ from rich.table import Table
 from cli.ui.console import console, print_success, print_error, print_warning, print_info, confirm
 from cli.utils.ssh import SSHManager
 from cli.utils.backup import BackupManager
+from cli.utils.remote_backup import RemoteBackupManager
+from cli.utils.config import ConfigManager
 
 app = typer.Typer(help="Backup and restore operations")
 
@@ -12,7 +14,8 @@ app = typer.Typer(help="Backup and restore operations")
 @app.command("create")
 def create_backup(
     site_name: str = typer.Argument(..., help="Site name to backup"),
-    compress: bool = typer.Option(True, help="Compress backup (tar.gz)")
+    compress: bool = typer.Option(True, help="Compress backup (tar.gz)"),
+    remote: bool = typer.Option(False, "--remote", help="Upload backup to remote S3 storage")
 ):
     """Create a backup of a WordPress site (database + files)"""
     try:
@@ -27,11 +30,24 @@ def create_backup(
             ssh.disconnect()
             raise typer.Exit(1)
 
+        # Check remote backup configuration if --remote flag used
+        config_mgr = ConfigManager()
+        remote_config = config_mgr.load_config().remote_backup
+
+        if remote and not remote_config.enabled:
+            print_error("Remote backup not configured. Run 'vibewp backup configure-remote' first")
+            ssh.disconnect()
+            raise typer.Exit(1)
+
         # Show estimated size
         estimated_size = backup_mgr.get_backup_size(site_name)
         console.print(f"\n[bold]Site:[/bold] {site_name}")
         console.print(f"[bold]Estimated size:[/bold] {estimated_size}")
-        console.print(f"[bold]Compression:[/bold] {'Enabled' if compress else 'Disabled'}\n")
+        console.print(f"[bold]Compression:[/bold] {'Enabled' if compress else 'Disabled'}")
+        if remote:
+            console.print(f"[bold]Remote sync:[/bold] Enabled (→ {remote_config.provider}:{remote_config.bucket})\n")
+        else:
+            console.print()
 
         if not confirm("Create backup?", default=True):
             ssh.disconnect()
@@ -45,6 +61,58 @@ def create_backup(
 
         print_success(f"Backup created: {backup_id}")
         console.print(f"\n[dim]Backup ID: {site_name}_{backup_id}[/dim]")
+
+        # Upload to remote if requested
+        if remote:
+            try:
+                remote_mgr = RemoteBackupManager(ssh)
+
+                # Check rclone installation
+                if not remote_mgr.check_rclone_installed():
+                    print_warning("rclone not installed on VPS, installing...")
+                    remote_mgr.install_rclone()
+                    print_success("rclone installed")
+
+                # Configure rclone if not already configured
+                if not remote_mgr.check_rclone_configured():
+                    print_info("Configuring rclone...")
+                    remote_mgr.configure_rclone(
+                        provider=remote_config.provider,
+                        bucket=remote_config.bucket,
+                        access_key=remote_config.access_key,
+                        secret_key=remote_config.secret_key,
+                        endpoint=remote_config.endpoint,
+                        region=remote_config.region
+                    )
+
+                # Sync to remote
+                print_info("Uploading backup to remote storage...")
+
+                backup_filename = f"{site_name}_{backup_id}.tar.gz" if compress else f"{site_name}_{backup_id}"
+                local_backup = f"{backup_mgr.backup_dir}/{backup_filename}"
+                remote_path = f"backups/{site_name}"
+
+                with console.status("[cyan]Syncing to S3...", spinner="dots"):
+                    remote_mgr.sync_backup_to_remote(
+                        local_backup_path=local_backup,
+                        remote_path=remote_path,
+                        bucket=remote_config.bucket,
+                        encryption=remote_config.encryption
+                    )
+
+                print_success(f"Backup uploaded to {remote_config.provider}:{remote_config.bucket}/{remote_path}")
+
+                # Cleanup old remote backups if retention configured
+                if remote_config.retention_days > 0:
+                    remote_mgr.cleanup_old_backups(
+                        bucket=remote_config.bucket,
+                        remote_path=f"backups/{site_name}",
+                        retention_days=remote_config.retention_days
+                    )
+
+            except Exception as e:
+                print_error(f"Remote upload failed: {e}")
+                print_warning("Local backup still available")
 
         ssh.disconnect()
 
@@ -334,4 +402,136 @@ def backup_info(
 
     except Exception as e:
         print_error(f"Failed to get backup info: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("configure-remote")
+def configure_remote_backup():
+    """Configure remote S3-compatible backup storage"""
+    try:
+        console.print("\n[bold cyan]Configure Remote Backup Storage[/bold cyan]\n")
+
+        # Get configuration inputs
+        console.print("[yellow]Provider types: s3 (AWS S3), r2 (Cloudflare R2), b2 (Backblaze B2)[/yellow]\n")
+
+        provider = typer.prompt("Provider (s3/r2/b2)", default="s3")
+        bucket = typer.prompt("Bucket name")
+        access_key = typer.prompt("Access key ID")
+        secret_key = typer.prompt("Secret access key", hide_input=True)
+
+        endpoint = None
+        region = None
+
+        if provider in ['r2', 'b2']:
+            endpoint = typer.prompt("S3 endpoint URL")
+
+        if provider == 's3':
+            region = typer.prompt("AWS region", default="us-east-1")
+
+        encryption = confirm("Enable encryption?", default=True)
+        retention_days = typer.prompt("Retention period (days)", default=30, type=int)
+
+        # Load and update config
+        config_mgr = ConfigManager()
+        config = config_mgr.load_config()
+
+        config.remote_backup.enabled = True
+        config.remote_backup.provider = provider
+        config.remote_backup.bucket = bucket
+        config.remote_backup.access_key = access_key
+        config.remote_backup.secret_key = secret_key
+        config.remote_backup.endpoint = endpoint
+        config.remote_backup.region = region
+        config.remote_backup.encryption = encryption
+        config.remote_backup.retention_days = retention_days
+
+        config_mgr.save_config(config)
+
+        print_success("Remote backup configuration saved")
+
+        # Test configuration
+        console.print("\n[yellow]Testing configuration...[/yellow]\n")
+
+        ssh = SSHManager.from_config()
+        ssh.connect()
+
+        remote_mgr = RemoteBackupManager(ssh)
+
+        # Check/install rclone
+        if not remote_mgr.check_rclone_installed():
+            print_info("Installing rclone on VPS...")
+            remote_mgr.install_rclone()
+
+        # Configure rclone
+        print_info("Configuring rclone...")
+        remote_mgr.configure_rclone(
+            provider=provider,
+            bucket=bucket,
+            access_key=access_key,
+            secret_key=secret_key,
+            endpoint=endpoint,
+            region=region
+        )
+
+        print_success("Remote backup configured and tested successfully!")
+        console.print(f"\n[dim]Use --remote flag with 'vibewp backup create' to upload backups[/dim]\n")
+
+        ssh.disconnect()
+
+    except Exception as e:
+        print_error(f"Configuration failed: {e}")
+        raise typer.Exit(1)
+
+
+@app.command("list-remote")
+def list_remote_backups(
+    site: str = typer.Option(None, "--site", help="Filter by site name")
+):
+    """List backups in remote S3 storage"""
+    try:
+        config_mgr = ConfigManager()
+        remote_config = config_mgr.load_config().remote_backup
+
+        if not remote_config.enabled:
+            print_error("Remote backup not configured")
+            raise typer.Exit(1)
+
+        ssh = SSHManager.from_config()
+        ssh.connect()
+
+        remote_mgr = RemoteBackupManager(ssh)
+
+        # Determine remote path
+        remote_path = f"backups/{site}" if site else "backups"
+
+        with console.status("[cyan]Fetching remote backup list...", spinner="dots"):
+            backups = remote_mgr.list_remote_backups(
+                bucket=remote_config.bucket,
+                remote_path=remote_path
+            )
+
+        if not backups:
+            print_info("No remote backups found")
+            ssh.disconnect()
+            return
+
+        # Create table
+        table = Table(title=f"Remote Backups ({remote_config.provider}:{remote_config.bucket})", show_header=True)
+        table.add_column("Filename", style="cyan")
+        table.add_column("Size", style="blue")
+
+        for backup in backups:
+            table.add_row(backup['filename'], backup['size'])
+
+        console.print(table)
+        console.print(f"\n[dim]Total: {len(backups)} backups[/dim]")
+
+        # Show total size
+        total_size = remote_mgr.get_remote_size(remote_config.bucket, remote_path)
+        console.print(f"[dim]Total size: {total_size}[/dim]\n")
+
+        ssh.disconnect()
+
+    except Exception as e:
+        print_error(f"Failed to list remote backups: {e}")
         raise typer.Exit(1)
