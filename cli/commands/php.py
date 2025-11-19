@@ -249,10 +249,7 @@ def show_php_limits(
 
         print_info(f"PHP Limits for '{site_name}' ({site_type}):\n")
 
-        # Get PHP info using WP-CLI
-        wpcli_container = f"{site_name}_wpcli"
-
-        # Check key PHP settings
+        # Check key PHP settings directly from web container (not WP-CLI)
         settings = [
             "upload_max_filesize",
             "post_max_size",
@@ -263,7 +260,7 @@ def show_php_limits(
 
         for setting in settings:
             exit_code, value, stderr = ssh.run_command(
-                f"docker exec {wpcli_container} wp eval 'echo ini_get(\"{setting}\");' 2>/dev/null",
+                f"docker exec {container_name} php -r 'echo ini_get(\"{setting}\");'",
                 timeout=10
             )
             if exit_code == 0 and value.strip():
