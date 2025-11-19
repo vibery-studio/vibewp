@@ -25,11 +25,11 @@ def get_site_type(ssh: SSHManager, site_name: str) -> Optional[str]:
 
 
 def update_frankenwp_limits(ssh: SSHManager, site_name: str, upload_max: str, memory_limit: str, post_max: str) -> bool:
-    """Update PHP limits for FrankenWP site using .user.ini"""
+    """Update PHP limits for FrankenWP site using custom PHP ini"""
     container_name = f"{site_name}_wp"
 
-    # Create PHP limits configuration in .user.ini (works with PHP-FPM)
-    user_ini_content = f"""upload_max_filesize = {upload_max}
+    # Create PHP limits configuration
+    php_ini_content = f"""upload_max_filesize = {upload_max}
 post_max_size = {post_max}
 memory_limit = {memory_limit}
 max_execution_time = 300
@@ -42,22 +42,18 @@ max_input_vars = 5000
     import os
 
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.ini') as tmp:
-        tmp.write(user_ini_content)
+        tmp.write(php_ini_content)
         tmp_path = tmp.name
 
     try:
-        # Copy to container
+        # Copy to container's PHP conf.d directory
         exit_code, stdout, stderr = ssh.run_command(
-            f"docker cp {tmp_path} {container_name}:/var/www/html/.user.ini"
+            f"docker cp {tmp_path} {container_name}:/usr/local/etc/php/conf.d/zz-custom-limits.ini"
         )
 
         if exit_code != 0:
-            print_error(f"Failed to update .user.ini: {stderr}")
+            print_error(f"Failed to update PHP config: {stderr}")
             return False
-
-        # Set proper permissions
-        ssh.run_command(f"docker exec {container_name} chown www-data:www-data /var/www/html/.user.ini")
-        ssh.run_command(f"docker exec {container_name} chmod 644 /var/www/html/.user.ini")
 
         # Restart container to apply changes immediately
         print_info("Restarting container to apply changes...")
@@ -202,14 +198,10 @@ def set_php_limits(
 
         if success:
             print_success(f"\n✓ PHP limits updated for '{site_name}'")
-            print_info("\nNew limits:")
-            print_info(f"  • Max upload file size: {upload_max}")
-            print_info(f"  • Max POST size:        {post_max}")
-            print_info(f"  • PHP memory limit:     {memory_limit}")
-            print_info(f"  • Max execution time:   300s")
+            print_info("\n✓ Verifying applied limits...")
 
-            if site_type == "ols":
-                print_info("\n⚠ OpenLiteSpeed has been restarted to apply changes")
+            # Show actual limits after applying
+            show_php_limits(site_name)
         else:
             print_error("Failed to update PHP limits")
             raise typer.Exit(code=1)
