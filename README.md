@@ -111,6 +111,14 @@ vibewp security clear-wpscan-token      # Remove WPScan API token
 vibewp security harden-vps              # Apply VPS security hardening
 vibewp security harden-wp <site>        # Apply WordPress security hardening
 
+# Malware Detection & Cleanup
+vibewp malware scan <site>              # Scan for malware indicators (non-destructive)
+vibewp malware cleanup <site>           # Remove malware (requires confirmation)
+  --plugins 'plugin1,plugin2'           # Remove specific plugins
+  --files 'file1.php,file2.php'         # Remove specific files
+  --auto                                # Auto-remove detected suspicious items
+  --backup/--no-backup                  # Create backup first (default: yes)
+
 # Firewall Management
 vibewp firewall list                    # List firewall rules
 vibewp firewall open <port>             # Open firewall port
