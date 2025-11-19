@@ -300,21 +300,38 @@ class BackupManager:
 
     def _backup_files(self, site_name: str, backup_path: str) -> None:
         """
-        Backup WordPress files
+        Backup WordPress files from Docker volume
 
         Args:
             site_name: Site name
             backup_path: Backup destination path
         """
-        site_path = f"{self.base_path}/{site_name}"
-        wp_content = f"{site_path}/wordpress"
+        # Files are in Docker volume, not in site directory
+        # Use docker cp to extract from volume via running container
+        wp_container = f"{site_name}_wp"
 
-        # Copy wp-content directory (contains themes, plugins, uploads)
-        cmd = f"sudo cp -r {wp_content} {backup_path}/wordpress"
-        exit_code, _, stderr = self.ssh.run_command(cmd)
+        # Check if container exists
+        exit_code, _, _ = self.ssh.run_command(
+            f"docker ps -a --filter name={wp_container} --format '{{{{.Names}}}}'",
+            timeout=10
+        )
+
+        if exit_code != 0:
+            raise RuntimeError(f"WordPress container '{wp_container}' not found")
+
+        # Copy WordPress files from container
+        # Focus on wp-content which has all user data (themes, plugins, uploads)
+        cmd = f"docker cp {wp_container}:/var/www/html/wp-content {backup_path}/wp-content"
+        exit_code, _, stderr = self.ssh.run_command(cmd, timeout=300)
 
         if exit_code != 0:
             raise RuntimeError(f"File backup failed: {stderr}")
+
+        # Also backup wp-config.php for site-specific settings
+        self.ssh.run_command(
+            f"docker cp {wp_container}:/var/www/html/wp-config.php {backup_path}/wp-config.php 2>/dev/null || true",
+            timeout=10
+        )
 
     def _compress_backup(self, backup_path: str) -> None:
         """
