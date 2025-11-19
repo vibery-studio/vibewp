@@ -310,7 +310,7 @@ def settings_action():
 
 def exit_action():
     """Action for exiting the application"""
-    if confirm("Are you sure you want to exit?", default=False):
+    if confirm("Are you sure you want to exit?", default=True):
         print_success("Goodbye!")
         return False  # Signal to exit menu
     return True  # Continue showing menu
