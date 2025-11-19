@@ -682,22 +682,24 @@ def reinstall_wordpress_core(
 
             print_info(f"Reinstalling WordPress core ({version_str})...")
 
-            # Temporarily change permissions to allow wp-cli to write
-            ssh.run_command(f"docker exec {wpcli_container} chmod -R u+w /var/www/html", timeout=30)
-
-            # Download WordPress core (run as default user which is www-data uid 33)
+            # Run as root to handle any permission scenarios
+            # This is safe as we're only replacing core files, not touching wp-content
             version_arg = f"--version={version}" if version else ""
             exit_code, stdout, stderr = ssh.run_command(
-                f"docker exec {wpcli_container} wp core download --force --skip-content {version_arg}",
+                f"docker exec --user root {wpcli_container} wp core download --force --skip-content --allow-root {version_arg}",
                 timeout=120
             )
-
-            # Restore proper permissions
-            ssh.run_command(f"docker exec {wpcli_container} chmod -R 755 /var/www/html", timeout=30)
 
             if exit_code != 0:
                 print_error(f"Failed to reinstall WordPress core: {stderr}")
                 raise typer.Exit(code=1)
+
+            # Ensure proper ownership after download
+            ssh.run_command(f"docker exec --user root {wpcli_container} chown -R www-data:www-data /var/www/html", timeout=30)
+
+            # Set recommended permissions: 755 for directories, 644 for files
+            ssh.run_command(f"docker exec --user root {wpcli_container} find /var/www/html -type d -exec chmod 755 {{}} \\;", timeout=60)
+            ssh.run_command(f"docker exec --user root {wpcli_container} find /var/www/html -type f -exec chmod 644 {{}} \\;", timeout=60)
 
             # Verify installation
             exit_code, wp_version, stderr = ssh.run_command(
