@@ -267,18 +267,29 @@ class BackupManager:
         if not db_container:
             raise RuntimeError(f"Database container not found for site '{site_name}'")
 
-        # Get database credentials from site config
-        from cli.utils.config import ConfigManager
-        config_mgr = ConfigManager()
-        site = config_mgr.get_site(site_name)
+        # Get database credentials from container environment
+        exit_code, db_user, _ = self.ssh.run_command(
+            f"docker exec {db_container} printenv MYSQL_USER || docker exec {db_container} printenv MYSQL_DATABASE",
+            timeout=10
+        )
+        db_user = db_user.strip() if exit_code == 0 and db_user.strip() else "wordpress"
 
-        if not site:
-            raise RuntimeError(f"Site '{site_name}' not found in config")
+        exit_code, db_pass, _ = self.ssh.run_command(
+            f"docker exec {db_container} printenv MYSQL_PASSWORD || echo 'wordpress'",
+            timeout=10
+        )
+        db_pass = db_pass.strip() if exit_code == 0 and db_pass.strip() else "wordpress"
+
+        exit_code, db_name, _ = self.ssh.run_command(
+            f"docker exec {db_container} printenv MYSQL_DATABASE",
+            timeout=10
+        )
+        db_name = db_name.strip() if exit_code == 0 and db_name.strip() else "wordpress"
 
         # Export database from MySQL/MariaDB container
         cmd = (
             f"docker exec {db_container} "
-            f"mysqldump -u {site.db_user} -p{site.db_password} {site.db_name} "
+            f"mysqldump -u {db_user} -p{db_pass} {db_name} "
             f"> {backup_path}/database.sql"
         )
 
@@ -469,18 +480,29 @@ class BackupManager:
         if not db_container:
             raise RuntimeError(f"Database container not found for site '{site_name}'")
 
-        # Get database credentials from site config
-        from cli.utils.config import ConfigManager
-        config_mgr = ConfigManager()
-        site = config_mgr.get_site(site_name)
+        # Get database credentials from container environment
+        exit_code, db_user, _ = self.ssh.run_command(
+            f"docker exec {db_container} printenv MYSQL_USER || docker exec {db_container} printenv MYSQL_DATABASE",
+            timeout=10
+        )
+        db_user = db_user.strip() if exit_code == 0 and db_user.strip() else "wordpress"
 
-        if not site:
-            raise RuntimeError(f"Site '{site_name}' not found in config")
+        exit_code, db_pass, _ = self.ssh.run_command(
+            f"docker exec {db_container} printenv MYSQL_PASSWORD || echo 'wordpress'",
+            timeout=10
+        )
+        db_pass = db_pass.strip() if exit_code == 0 and db_pass.strip() else "wordpress"
+
+        exit_code, db_name, _ = self.ssh.run_command(
+            f"docker exec {db_container} printenv MYSQL_DATABASE",
+            timeout=10
+        )
+        db_name = db_name.strip() if exit_code == 0 and db_name.strip() else "wordpress"
 
         # Import database into MySQL/MariaDB container
         cmd = (
             f"docker exec -i {db_container} "
-            f"mysql -u {site.db_user} -p{site.db_password} {site.db_name} "
+            f"mysql -u {db_user} -p{db_pass} {db_name} "
             f"< {db_file}"
         )
 
