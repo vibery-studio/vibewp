@@ -682,12 +682,18 @@ def reinstall_wordpress_core(
 
             print_info(f"Reinstalling WordPress core ({version_str})...")
 
-            # Download WordPress core (run as www-data user)
+            # Temporarily change permissions to allow wp-cli to write
+            ssh.run_command(f"docker exec {wpcli_container} chmod -R u+w /var/www/html", timeout=30)
+
+            # Download WordPress core (run as default user which is www-data uid 33)
             version_arg = f"--version={version}" if version else ""
             exit_code, stdout, stderr = ssh.run_command(
-                f"docker exec --user www-data {wpcli_container} wp core download --force --skip-content {version_arg}",
+                f"docker exec {wpcli_container} wp core download --force --skip-content {version_arg}",
                 timeout=120
             )
+
+            # Restore proper permissions
+            ssh.run_command(f"docker exec {wpcli_container} chmod -R 755 /var/www/html", timeout=30)
 
             if exit_code != 0:
                 print_error(f"Failed to reinstall WordPress core: {stderr}")
