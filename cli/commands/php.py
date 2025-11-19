@@ -59,9 +59,16 @@ max_input_vars = 5000
         ssh.run_command(f"docker exec {container_name} chown www-data:www-data /var/www/html/.user.ini")
         ssh.run_command(f"docker exec {container_name} chmod 644 /var/www/html/.user.ini")
 
-        # Restart PHP-FPM to apply changes immediately
-        print_info("Restarting PHP-FPM...")
-        ssh.run_command(f"docker exec {container_name} kill -USR2 1", timeout=10)
+        # Restart container to apply changes immediately
+        print_info("Restarting container to apply changes...")
+        exit_code, stdout, stderr = ssh.run_command(f"docker restart {container_name}", timeout=30)
+
+        if exit_code != 0:
+            print_warning(f"Container restart warning: {stderr}")
+
+        # Wait for container to be healthy
+        import time
+        time.sleep(3)
 
         return True
     finally:
