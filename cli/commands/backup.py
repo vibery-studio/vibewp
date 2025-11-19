@@ -15,7 +15,8 @@ app = typer.Typer(help="Backup and restore operations")
 def create_backup(
     site_name: str = typer.Argument(..., help="Site name to backup"),
     compress: bool = typer.Option(True, help="Compress backup (tar.gz)"),
-    remote: bool = typer.Option(False, "--remote", help="Upload backup to remote S3 storage")
+    remote: bool = typer.Option(False, "--remote", help="Upload backup to remote S3 storage"),
+    exclude_uploads: bool = typer.Option(False, "--exclude-uploads", help="Skip uploads directory for faster backup")
 ):
     """Create a backup of a WordPress site (database + files)"""
     try:
@@ -54,10 +55,13 @@ def create_backup(
             raise typer.Exit()
 
         # Create backup
-        print_info(f"Creating backup of {site_name}...")
+        if exclude_uploads:
+            print_info(f"Creating backup of {site_name} (excluding uploads)...")
+        else:
+            print_info(f"Creating backup of {site_name}...")
 
         with console.status("[cyan]Backing up database and files...", spinner="dots"):
-            backup_id = backup_mgr.create_backup(site_name, compress=compress)
+            backup_id = backup_mgr.create_backup(site_name, compress=compress, exclude_uploads=exclude_uploads)
 
         print_success(f"Backup created: {backup_id}")
         console.print(f"\n[dim]Backup ID: {site_name}_{backup_id}[/dim]")
