@@ -252,14 +252,37 @@ class BackupManager:
             site_name: Site name
             backup_path: Backup destination path
         """
-        # Export database from MySQL container
+        # Detect database container name (support both _ and - separators)
+        db_container = None
+        for separator in ['_', '-']:
+            container_name = f"{site_name}{separator}db"
+            exit_code, stdout, _ = self.ssh.run_command(
+                f"docker ps --filter name={container_name} --format '{{{{.Names}}}}'",
+                timeout=10
+            )
+            if exit_code == 0 and stdout.strip():
+                db_container = stdout.strip()
+                break
+
+        if not db_container:
+            raise RuntimeError(f"Database container not found for site '{site_name}'")
+
+        # Get database credentials from site config
+        from cli.utils.config import ConfigManager
+        config_mgr = ConfigManager()
+        site = config_mgr.get_site(site_name)
+
+        if not site:
+            raise RuntimeError(f"Site '{site_name}' not found in config")
+
+        # Export database from MySQL/MariaDB container
         cmd = (
-            f"sudo docker exec {site_name}-mysql "
-            f"mysqldump -u wordpress -pwordpress wordpress "
+            f"docker exec {db_container} "
+            f"mysqldump -u {site.db_user} -p{site.db_password} {site.db_name} "
             f"> {backup_path}/database.sql"
         )
 
-        exit_code, _, stderr = self.ssh.run_command(cmd)
+        exit_code, _, stderr = self.ssh.run_command(cmd, timeout=300)
 
         if exit_code != 0:
             raise RuntimeError(f"Database backup failed: {stderr}")
@@ -431,14 +454,37 @@ class BackupManager:
         """
         db_file = f"{backup_path}/database.sql"
 
-        # Import database into MySQL container
+        # Detect database container name (support both _ and - separators)
+        db_container = None
+        for separator in ['_', '-']:
+            container_name = f"{site_name}{separator}db"
+            exit_code, stdout, _ = self.ssh.run_command(
+                f"docker ps --filter name={container_name} --format '{{{{.Names}}}}'",
+                timeout=10
+            )
+            if exit_code == 0 and stdout.strip():
+                db_container = stdout.strip()
+                break
+
+        if not db_container:
+            raise RuntimeError(f"Database container not found for site '{site_name}'")
+
+        # Get database credentials from site config
+        from cli.utils.config import ConfigManager
+        config_mgr = ConfigManager()
+        site = config_mgr.get_site(site_name)
+
+        if not site:
+            raise RuntimeError(f"Site '{site_name}' not found in config")
+
+        # Import database into MySQL/MariaDB container
         cmd = (
-            f"sudo docker exec -i {site_name}-mysql "
-            f"mysql -u wordpress -pwordpress wordpress "
+            f"docker exec -i {db_container} "
+            f"mysql -u {site.db_user} -p{site.db_password} {site.db_name} "
             f"< {db_file}"
         )
 
-        exit_code, _, stderr = self.ssh.run_command(cmd)
+        exit_code, _, stderr = self.ssh.run_command(cmd, timeout=300)
 
         if exit_code != 0:
             raise RuntimeError(f"Database restore failed: {stderr}")
