@@ -25,55 +25,43 @@ def get_site_type(ssh: SSHManager, site_name: str) -> Optional[str]:
 
 
 def update_frankenwp_limits(ssh: SSHManager, site_name: str, upload_max: str, memory_limit: str, post_max: str) -> bool:
-    """Update PHP limits for FrankenWP site using .htaccess"""
+    """Update PHP limits for FrankenWP site using .user.ini"""
     container_name = f"{site_name}_wp"
 
-    # Create PHP limits configuration in .htaccess
-    htaccess_content = f"""# BEGIN WordPress PHP Limits
-php_value upload_max_filesize {upload_max}
-php_value post_max_size {post_max}
-php_value memory_limit {memory_limit}
-php_value max_execution_time 300
-php_value max_input_time 300
-# END WordPress PHP Limits
-
-# BEGIN WordPress
-# The directives (lines) between "BEGIN WordPress" and "END WordPress" are
-# dynamically generated, and should only be modified via WordPress filters.
-# Any changes to the directives between these markers will be overwritten.
-<IfModule mod_rewrite.c>
-RewriteEngine On
-RewriteRule .* - [E=HTTP_AUTHORIZATION:%{{HTTP:Authorization}}]
-RewriteBase /
-RewriteRule ^index\\.php$ - [L]
-RewriteCond %{{REQUEST_FILENAME}} !-f
-RewriteCond %{{REQUEST_FILENAME}} !-d
-RewriteRule . /index.php [L]
-</IfModule>
-# END WordPress
+    # Create PHP limits configuration in .user.ini (works with PHP-FPM)
+    user_ini_content = f"""upload_max_filesize = {upload_max}
+post_max_size = {post_max}
+memory_limit = {memory_limit}
+max_execution_time = 300
+max_input_time = 300
+max_input_vars = 5000
 """
 
     # Write to temporary file
     import tempfile
     import os
 
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.htaccess') as tmp:
-        tmp.write(htaccess_content)
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.ini') as tmp:
+        tmp.write(user_ini_content)
         tmp_path = tmp.name
 
     try:
         # Copy to container
         exit_code, stdout, stderr = ssh.run_command(
-            f"docker cp {tmp_path} {container_name}:/var/www/html/.htaccess"
+            f"docker cp {tmp_path} {container_name}:/var/www/html/.user.ini"
         )
 
         if exit_code != 0:
-            print_error(f"Failed to update .htaccess: {stderr}")
+            print_error(f"Failed to update .user.ini: {stderr}")
             return False
 
         # Set proper permissions
-        ssh.run_command(f"docker exec {container_name} chown www-data:www-data /var/www/html/.htaccess")
-        ssh.run_command(f"docker exec {container_name} chmod 644 /var/www/html/.htaccess")
+        ssh.run_command(f"docker exec {container_name} chown www-data:www-data /var/www/html/.user.ini")
+        ssh.run_command(f"docker exec {container_name} chmod 644 /var/www/html/.user.ini")
+
+        # Restart PHP-FPM to apply changes immediately
+        print_info("Restarting PHP-FPM...")
+        ssh.run_command(f"docker exec {container_name} kill -USR2 1", timeout=10)
 
         return True
     finally:
