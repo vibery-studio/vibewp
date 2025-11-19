@@ -116,6 +116,30 @@ def config_path():
         raise typer.Exit(code=1)
 
 
+@config_app.command("set-db-mode")
+def config_set_db_mode(mode: str = typer.Argument(..., help="Database mode: shared or dedicated")):
+    """Set database mode for new sites"""
+    from cli.commands.config import set_db_mode
+
+    try:
+        set_db_mode(mode)
+    except Exception as e:
+        print_error(f"Failed to set DB mode: {e}")
+        raise typer.Exit(code=1)
+
+
+@config_app.command("get-db-mode")
+def config_get_db_mode():
+    """Display current database mode"""
+    from cli.commands.config import get_db_mode
+
+    try:
+        get_db_mode()
+    except Exception as e:
+        print_error(f"Failed to get DB mode: {e}")
+        raise typer.Exit(code=1)
+
+
 @app.command()
 def test_ssh():
     """Test SSH connection to VPS"""

@@ -37,6 +37,7 @@ def show_config() -> None:
         console.print("\n[bold]Docker Settings:[/bold]")
         console.print(f"  Base Path:     {config.docker.base_path}")
         console.print(f"  Network Name:  {config.docker.network_name}")
+        console.print(f"  DB Mode:       [cyan]{config.docker.db_mode}[/cyan]")
 
         # Sites
         console.print(f"\n[bold]Deployed Sites:[/bold] {len(config.sites)}")
@@ -159,4 +160,61 @@ def import_config(input_path: str) -> None:
 
     except Exception as e:
         print_error(f"Failed to import config: {e}")
+        raise
+
+
+def set_db_mode(mode: str) -> None:
+    """
+    Set database mode (shared or dedicated)
+
+    Args:
+        mode: Database mode - "shared" or "dedicated"
+    """
+    try:
+        if mode not in ["shared", "dedicated"]:
+            print_error("Invalid DB mode. Choose 'shared' or 'dedicated'")
+            return
+
+        config_mgr = ConfigManager()
+        config = config_mgr.load_config()
+
+        # Update db_mode
+        config.docker.db_mode = mode
+        config_mgr.save_config(config)
+
+        print_success(f"Database mode set to: {mode}")
+
+        # Show explanation
+        if mode == "shared":
+            console.print("\n[yellow]Shared DB mode:[/yellow]")
+            console.print("  • New sites will use a single shared database container")
+            console.print("  • Each site gets its own database within shared container")
+            console.print("  • Saves ~400MB RAM per site")
+            console.print("  • Existing sites remain unchanged")
+        else:
+            console.print("\n[yellow]Dedicated DB mode:[/yellow]")
+            console.print("  • New sites will get dedicated database containers")
+            console.print("  • Complete database isolation per site")
+            console.print("  • Existing sites remain unchanged")
+
+    except Exception as e:
+        print_error(f"Failed to set DB mode: {e}")
+        raise
+
+
+def get_db_mode() -> None:
+    """Display current database mode"""
+    try:
+        config_mgr = ConfigManager()
+        config = config_mgr.load_config()
+
+        console.print(f"\n[bold]Current DB Mode:[/bold] [cyan]{config.docker.db_mode}[/cyan]\n")
+
+        if config.docker.db_mode == "shared":
+            console.print("[dim]Using shared database container for all sites[/dim]")
+        else:
+            console.print("[dim]Using dedicated database container per site[/dim]")
+
+    except Exception as e:
+        print_error(f"Failed to get DB mode: {e}")
         raise

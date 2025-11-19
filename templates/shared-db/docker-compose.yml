@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  shared_db:
+    image: mariadb:10.11
+    container_name: vibewp_shared_db
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
+      MYSQL_INITDB_SKIP_TZINFO: '1'
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - proxy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --max_connections=500
+      --innodb_buffer_pool_size=1G
+      --innodb_log_file_size=256M
+      --innodb_flush_log_at_trx_commit=2
+      --innodb_flush_method=O_DIRECT
+
+volumes:
+  db_data:
+    name: vibewp_shared_db_data
+
+networks:
+  proxy:
+    external: true

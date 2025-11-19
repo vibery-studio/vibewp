@@ -64,6 +64,13 @@ class DockerConfig(BaseModel):
     """Docker configuration"""
     base_path: str = "/opt/vibewp"
     network_name: str = "proxy"
+    db_mode: str = "dedicated"  # "dedicated" or "shared"
+
+    @validator('db_mode')
+    def validate_db_mode(cls, v):
+        if v not in ["dedicated", "shared"]:
+            raise ValueError('db_mode must be "dedicated" or "shared"')
+        return v
 
 
 class SiteConfig(BaseModel):
@@ -74,6 +81,7 @@ class SiteConfig(BaseModel):
     status: str = "running"
     domains: List[str] = Field(default_factory=list)  # Additional domains
     created: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    db_mode: str = "dedicated"  # "dedicated" or "shared"
 
     @validator('name')
     def validate_name(cls, v):
@@ -135,7 +143,8 @@ class ConfigManager:
                     },
                     'docker': {
                         'base_path': '/opt/vibewp',
-                        'network_name': 'proxy'
+                        'network_name': 'proxy',
+                        'db_mode': 'dedicated'
                     },
                     'remote_backup': {
                         'enabled': False,
@@ -164,7 +173,8 @@ class ConfigManager:
                     },
                     'docker': {
                         'base_path': '/opt/vibewp',
-                        'network_name': 'proxy'
+                        'network_name': 'proxy',
+                        'db_mode': 'dedicated'
                     },
                     'remote_backup': {
                         'enabled': False,

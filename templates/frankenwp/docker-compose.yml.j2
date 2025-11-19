@@ -5,21 +5,31 @@ services:
     image: wordpress:latest
     container_name: {{ site_name }}_wp
     environment:
+{% if db_mode == 'shared' %}
+      WORDPRESS_DB_HOST: vibewp_shared_db:3306
+{% else %}
       WORDPRESS_DB_HOST: db:3306
+{% endif %}
       WORDPRESS_DB_USER: {{ db_user }}
       WORDPRESS_DB_PASSWORD: "{{ db_password }}"
       WORDPRESS_DB_NAME: {{ db_name }}
     volumes:
       - wp_data:/var/www/html
     networks:
+{% if db_mode == 'shared' %}
+      - proxy
+{% else %}
       - default
       - proxy
+{% endif %}
     labels:
       caddy: {{ domain }}
       caddy.reverse_proxy: "{{ '{{upstreams}}' }}"
+{% if db_mode == 'dedicated' %}
     depends_on:
       db:
         condition: service_healthy
+{% endif %}
     restart: unless-stopped
 
   wpcli:
@@ -27,20 +37,31 @@ services:
     container_name: {{ site_name }}_wpcli
     user: "33:33"
     environment:
+{% if db_mode == 'shared' %}
+      WORDPRESS_DB_HOST: vibewp_shared_db:3306
+{% else %}
       WORDPRESS_DB_HOST: db:3306
+{% endif %}
       WORDPRESS_DB_USER: {{ db_user }}
       WORDPRESS_DB_PASSWORD: "{{ db_password }}"
       WORDPRESS_DB_NAME: {{ db_name }}
     volumes:
       - wp_data:/var/www/html
     networks:
+{% if db_mode == 'shared' %}
+      - proxy
+{% else %}
       - default
+{% endif %}
+{% if db_mode == 'dedicated' %}
     depends_on:
       db:
         condition: service_healthy
+{% endif %}
     entrypoint: sh
     command: -c "sleep infinity"
 
+{% if db_mode == 'dedicated' %}
   db:
     image: mariadb:10.11
     container_name: {{ site_name }}_db
@@ -67,15 +88,20 @@ services:
       --max_connections=100
       --innodb_buffer_pool_size=256M
       --innodb_log_file_size=64M
+{% endif %}
 
 volumes:
   wp_data:
     name: {{ site_name }}_wp_data
+{% if db_mode == 'dedicated' %}
   db_data:
     name: {{ site_name }}_db_data
+{% endif %}
 
 networks:
+{% if db_mode == 'dedicated' %}
   default:
     name: {{ site_name }}_default
+{% endif %}
   proxy:
     external: true

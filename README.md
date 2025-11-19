@@ -89,6 +89,7 @@ vibewp site stop <name>                 # Stop site containers
 vibewp site restart <name>              # Restart site containers
 vibewp site delete <name>               # Remove site completely
 vibewp site logs <name>                 # View container logs
+vibewp site reinstall-core <name>       # Reinstall WordPress core (after hack)
 ```
 
 ### Domain Management
@@ -104,8 +105,9 @@ vibewp domain ssl-status <site>         # Check SSL certificate status
 ```bash
 # Security Commands
 vibewp security scan                    # Basic security scan
-vibewp security audit-server            # Full server security audit
-vibewp security set-wpscan-token        # Configure WPScan API token
+vibewp security audit-server            # Full server security audit (includes WPScan)
+vibewp security set-wpscan-token <token># Configure WPScan API token
+vibewp security clear-wpscan-token      # Remove WPScan API token
 vibewp security harden-vps              # Apply VPS security hardening
 vibewp security harden-wp <site>        # Apply WordPress security hardening
 
@@ -143,10 +145,16 @@ vibewp sftp info                        # Show SFTP configuration
 
 ### Proxy & PHP Management
 ```bash
+# Proxy Management
 vibewp proxy reload                     # Reload Caddy configuration
 vibewp proxy status                     # Check proxy status
-vibewp php list-versions                # List available PHP versions
-vibewp php switch <site> <version>      # Switch PHP version
+
+# PHP Configuration
+vibewp php set-limits <site>            # Set PHP limits (upload, memory, post)
+  --upload-max 1G                       # Max upload file size
+  --memory-limit 1G                     # PHP memory limit
+  --post-max 1G                         # Max POST size
+vibewp php show-limits <site>           # Show current PHP limits
 ```
 
 ### Self-Update Management

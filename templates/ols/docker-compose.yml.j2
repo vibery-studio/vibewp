@@ -11,7 +11,11 @@ services:
       - SERVER_ROOT=/var/www/vhosts/{{ domain }}
       - LS_OLS_ENABLE_LSCACHE=true
       # Redis configuration for object caching
+{% if db_mode == 'shared' %}
+      - WORDPRESS_DB_HOST=vibewp_shared_db
+{% else %}
       - WORDPRESS_DB_HOST=mysql
+{% endif %}
       - WORDPRESS_DB_USER={{ db_user }}
       - WORDPRESS_DB_PASSWORD={{ db_password }}
       - WORDPRESS_DB_NAME={{ db_name }}
@@ -24,8 +28,12 @@ services:
       - acme:/root/.acme.sh
       - lsws_logs:/usr/local/lsws/logs
     networks:
+{% if db_mode == 'shared' %}
+      - proxy
+{% else %}
       - default
       - proxy
+{% endif %}
     labels:
       # Caddy proxy configuration
       caddy: {{ domain }}
@@ -52,20 +60,31 @@ services:
     container_name: {{ site_name }}_wpcli
     user: "33:33"
     environment:
+{% if db_mode == 'shared' %}
+      WORDPRESS_DB_HOST: vibewp_shared_db:3306
+{% else %}
       WORDPRESS_DB_HOST: mysql:3306
+{% endif %}
       WORDPRESS_DB_USER: {{ db_user }}
       WORDPRESS_DB_PASSWORD: "{{ db_password }}"
       WORDPRESS_DB_NAME: {{ db_name }}
     volumes:
       - ./sites/{{ site_name }}:/var/www/vhosts/{{ domain }}
     networks:
+{% if db_mode == 'shared' %}
+      - proxy
+{% else %}
       - default
+{% endif %}
+{% if db_mode == 'dedicated' %}
     depends_on:
       mysql:
         condition: service_healthy
+{% endif %}
     entrypoint: sh
     command: -c "sleep infinity"
 
+{% if db_mode == 'dedicated' %}
   mysql:
     image: mariadb:10.11
     container_name: {{ site_name }}_db
@@ -93,6 +112,7 @@ services:
       --innodb_log_file_size=128M
       --query_cache_size=32M
       --query_cache_type=1
+{% endif %}
 
   redis:
     image: redis:alpine
@@ -106,7 +126,11 @@ services:
     volumes:
       - redis_data:/data
     networks:
+{% if db_mode == 'shared' %}
+      - proxy
+{% else %}
       - default
+{% endif %}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -119,13 +143,21 @@ services:
     image: phpmyadmin:latest
     container_name: {{ site_name }}_pma
     environment:
+{% if db_mode == 'shared' %}
+      PMA_HOST: vibewp_shared_db
+{% else %}
       PMA_HOST: mysql
+{% endif %}
       PMA_PORT: 3306
       PMA_USER: {{ db_user }}
       PMA_PASSWORD: "{{ db_password }}"
       UPLOAD_LIMIT: 128M
     networks:
+{% if db_mode == 'shared' %}
+      - proxy
+{% else %}
       - default
+{% endif %}
     restart: unless-stopped
     labels:
       # phpMyAdmin via Caddy (secure subdomain)
@@ -139,8 +171,10 @@ services:
       {% endif %}
 
 volumes:
+{% if db_mode == 'dedicated' %}
   db_data:
     name: {{ site_name }}_db_data
+{% endif %}
   redis_data:
     name: {{ site_name }}_redis_data
   lsws_conf:
@@ -153,7 +187,9 @@ volumes:
     name: {{ site_name }}_lsws_logs
 
 networks:
+{% if db_mode == 'dedicated' %}
   default:
     name: {{ site_name }}_default
+{% endif %}
   proxy:
     external: true

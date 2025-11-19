@@ -56,6 +56,7 @@ def create_site(
     wp_type: Optional[str] = typer.Option(None, help="WordPress type (frankenwp/ols)"),
     admin_email: Optional[str] = typer.Option(None, help="Admin email"),
     site_title: Optional[str] = typer.Option(None, help="Site title"),
+    db_mode: Optional[str] = typer.Option(None, "--db-mode", help="Database mode (shared/dedicated, defaults to config)"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
     """Create a new WordPress site"""
@@ -105,11 +106,21 @@ def create_site(
             site_title = typer.prompt("Site title", default=domain)
         site_title = str(site_title).strip()
 
+        # Handle db_mode: use flag if provided, otherwise use config default
+        if db_mode and isinstance(db_mode, str):
+            db_mode = str(db_mode).strip().lower()
+            if db_mode not in ["shared", "dedicated"]:
+                print_error("Invalid DB mode. Choose 'shared' or 'dedicated'")
+                raise typer.Exit(code=1)
+        else:
+            db_mode = config_mgr.docker.db_mode
+
         # Display summary
         console.print("\n[bold cyan]Site Configuration:[/bold cyan]")
         console.print(f"  Site Name: {site_name}")
         console.print(f"  Domain: {domain}")
         console.print(f"  Engine: {wp_type}")
+        console.print(f"  DB Mode: {db_mode}")
         console.print(f"  Admin Email: {admin_email}")
         console.print(f"  Site Title: {site_title}\n")
 
@@ -126,6 +137,7 @@ def create_site(
         creds['site_name'] = site_name
         creds['domain'] = domain
         creds['site_title'] = site_title
+        creds['db_mode'] = db_mode
 
         # Render docker-compose template
         with Progress(
@@ -204,6 +216,27 @@ def create_site(
             print_error(f"SSH connection failed: {e}")
             raise typer.Exit(code=1)
 
+        # Handle shared DB mode
+        shared_db_root_password = None
+        if db_mode == "shared":
+            print_info("Setting up shared database...")
+            from cli.utils.database import DatabaseManager
+
+            db_mgr = DatabaseManager(ssh)
+
+            # Get or generate root password
+            shared_db_root_password = db_mgr.get_shared_db_root_password()
+            if not shared_db_root_password:
+                shared_db_root_password = DatabaseManager.generate_root_password()
+                db_mgr.save_shared_db_root_password(shared_db_root_password)
+
+            # Ensure shared DB exists
+            if not db_mgr.ensure_shared_db_exists(shared_db_root_password):
+                print_error("Failed to setup shared database")
+                raise typer.Exit(code=1)
+
+            print_success("✓ Shared database ready")
+
         # Define remote directory
         remote_base = config_mgr.docker.base_path
         remote_dir = f"{remote_base}/sites/{site_name}"
@@ -242,13 +275,31 @@ def create_site(
                 progress.update(task, description="Waiting for containers to start...")
                 time.sleep(5)
 
-                # Wait for database
-                progress.update(task, description="Waiting for database initialization...")
+                # Handle database setup based on mode
                 health_checker = HealthChecker(ssh_manager=ssh)
-                db_container = f"{site_name}_db"
 
-                if not health_checker.wait_for_database(db_container, timeout=90):
-                    raise RuntimeError("Database initialization timeout")
+                if db_mode == "shared":
+                    # Create database and user in shared DB
+                    progress.update(task, description="Creating database in shared DB...")
+                    from cli.utils.database import DatabaseManager
+                    db_mgr = DatabaseManager(ssh)
+
+                    if not db_mgr.create_database_and_user(
+                        db_name=creds['db_name'],
+                        db_user=creds['db_user'],
+                        db_password=creds['db_password'],
+                        root_password=shared_db_root_password
+                    ):
+                        raise RuntimeError("Failed to create database in shared DB")
+
+                    progress.update(task, description="Database created in shared DB...")
+                else:
+                    # Wait for dedicated database
+                    progress.update(task, description="Waiting for database initialization...")
+                    db_container = f"{site_name}_db"
+
+                    if not health_checker.wait_for_database(db_container, timeout=90):
+                        raise RuntimeError("Database initialization timeout")
 
                 # Wait for WordPress container
                 wp_container = f"{site_name}_wp" if wp_type == "frankenwp" else f"{site_name}_ols"
@@ -313,7 +364,8 @@ def create_site(
                 name=site_name,
                 domain=domain,
                 type=wp_type,
-                status="running"
+                status="running",
+                db_mode=db_mode
             )
             config_mgr.add_site(site_config)
 
@@ -368,14 +420,16 @@ def list_sites():
         table.add_column("Name", style="cyan")
         table.add_column("Domain", style="green")
         table.add_column("Type", style="yellow")
+        table.add_column("DB Mode", style="blue")
         table.add_column("Status", style="magenta")
-        table.add_column("Created", style="blue")
+        table.add_column("Created", style="dim")
 
         for site in sites:
             table.add_row(
                 site.name,
                 site.domain,
                 site.type,
+                site.db_mode,
                 site.status,
                 site.created[:10]  # Show date only
             )
@@ -403,6 +457,7 @@ def site_info(site_name: str = typer.Argument(..., help="Site name")):
             f"[bold]Name:[/bold] {site.name}\n"
             f"[bold]Domain:[/bold] {site.domain}\n"
             f"[bold]Type:[/bold] {site.type}\n"
+            f"[bold]DB Mode:[/bold] {site.db_mode}\n"
             f"[bold]Status:[/bold] {site.status}\n"
             f"[bold]Created:[/bold] {site.created}\n\n"
             f"[bold cyan]URLs:[/bold cyan]\n"
@@ -476,6 +531,25 @@ def delete_site(
                 if exit_code != 0:
                     print_warning(f"Docker compose down warning: {stderr}")
 
+                # If shared DB mode, cleanup database and user
+                if site.db_mode == "shared":
+                    progress.update(task, description="Removing database from shared DB...")
+                    from cli.utils.database import DatabaseManager
+                    from cli.utils.credentials import CredentialGenerator
+
+                    db_mgr = DatabaseManager(ssh)
+                    root_password = db_mgr.get_shared_db_root_password()
+
+                    if root_password:
+                        # Get site's DB credentials
+                        db_name = f"{site_name}_wp"
+                        db_user = f"{site_name}_user"
+
+                        if not db_mgr.delete_database_and_user(db_name, db_user, root_password):
+                            print_warning("Failed to delete database from shared DB")
+                    else:
+                        print_warning("Shared DB root password not found")
+
                 # Remove site directory
                 progress.update(task, description="Removing site directory...")
                 exit_code, stdout, stderr = ssh.run_command(f"rm -rf {remote_dir}")
@@ -545,6 +619,93 @@ def site_logs(
                 console.print(stdout)
             else:
                 print_error(f"Failed to fetch logs: {stderr}")
+
+        finally:
+            ssh.disconnect()
+
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command("reinstall-core")
+def reinstall_wordpress_core(
+    site_name: str = typer.Argument(..., help="Site name"),
+    version: Optional[str] = typer.Option(None, "--version", help="WordPress version (default: latest)"),
+    force: bool = typer.Option(False, "--force", help="Skip confirmation")
+):
+    """
+    Reinstall WordPress core files (useful after hack/corruption)
+
+    This will:
+    - Download fresh WordPress core files
+    - Replace all WP core files (wp-admin, wp-includes, root PHP files)
+    - Preserve wp-content and wp-config.php
+    - Keep your database intact
+    """
+    from cli.ui.console import confirm
+
+    try:
+        config_mgr = ConfigManager()
+        config_mgr.load_config()
+
+        site = config_mgr.get_site(site_name)
+        if not site:
+            print_error(f"Site '{site_name}' not found")
+            raise typer.Exit(code=1)
+
+        # Warning
+        if not force:
+            print_warning("\n⚠️  This will reinstall WordPress core files")
+            print_info("  • wp-admin/ and wp-includes/ will be replaced")
+            print_info("  • Root PHP files will be replaced")
+            print_info("  • wp-content/ and wp-config.php will be preserved")
+            print_info("  • Your database will remain untouched\n")
+
+            if not confirm("Continue with WordPress core reinstallation?", default=False):
+                print_info("Reinstallation cancelled")
+                return
+
+        # Connect to VPS
+        ssh = SSHManager(
+            host=config_mgr.vps.host,
+            port=config_mgr.vps.port,
+            user=config_mgr.vps.user,
+            key_path=config_mgr.vps.key_path
+        )
+
+        ssh.connect()
+
+        try:
+            wpcli_container = f"{site_name}_wpcli"
+            version_str = version if version else "latest"
+
+            print_info(f"Reinstalling WordPress core ({version_str})...")
+
+            # Download WordPress core
+            version_arg = f"--version={version}" if version else ""
+            exit_code, stdout, stderr = ssh.run_command(
+                f"docker exec {wpcli_container} wp core download --force --skip-content {version_arg}",
+                timeout=120
+            )
+
+            if exit_code != 0:
+                print_error(f"Failed to reinstall WordPress core: {stderr}")
+                raise typer.Exit(code=1)
+
+            # Verify installation
+            exit_code, wp_version, stderr = ssh.run_command(
+                f"docker exec {wpcli_container} wp core version",
+                timeout=10
+            )
+
+            if exit_code == 0:
+                print_success(f"\n✓ WordPress core reinstalled successfully")
+                print_info(f"  Version: {wp_version.strip()}")
+                print_info("\n✓ Your content and database are intact")
+                print_info("✓ Please test your site and clear any caches")
+            else:
+                print_warning("Core reinstalled but version check failed")
 
         finally:
             ssh.disconnect()
