@@ -682,10 +682,10 @@ def reinstall_wordpress_core(
 
             print_info(f"Reinstalling WordPress core ({version_str})...")
 
-            # Download WordPress core
+            # Download WordPress core (run as www-data user)
             version_arg = f"--version={version}" if version else ""
             exit_code, stdout, stderr = ssh.run_command(
-                f"docker exec {wpcli_container} wp core download --force --skip-content {version_arg}",
+                f"docker exec --user www-data {wpcli_container} wp core download --force --skip-content {version_arg}",
                 timeout=120
             )
 
