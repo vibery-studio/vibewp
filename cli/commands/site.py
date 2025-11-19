@@ -682,6 +682,13 @@ def reinstall_wordpress_core(
 
             print_info(f"Reinstalling WordPress core ({version_str})...")
 
+            # Backup .htaccess before reinstall (may contain security rules or custom config)
+            print_info("Backing up .htaccess...")
+            ssh.run_command(
+                f"docker exec --user root {wpcli_container} cp /var/www/html/.htaccess /var/www/html/.htaccess.backup 2>/dev/null || true",
+                timeout=10
+            )
+
             # Run as root to handle any permission scenarios
             # This is safe as we're only replacing core files, not touching wp-content
             version_arg = f"--version={version}" if version else ""
@@ -693,6 +700,13 @@ def reinstall_wordpress_core(
             if exit_code != 0:
                 print_error(f"Failed to reinstall WordPress core: {stderr}")
                 raise typer.Exit(code=1)
+
+            # Restore .htaccess backup if it exists
+            print_info("Restoring .htaccess...")
+            ssh.run_command(
+                f"docker exec --user root {wpcli_container} mv /var/www/html/.htaccess.backup /var/www/html/.htaccess 2>/dev/null || true",
+                timeout=10
+            )
 
             # Ensure proper ownership after download
             ssh.run_command(f"docker exec --user root {wpcli_container} chown -R www-data:www-data /var/www/html", timeout=30)
