@@ -765,12 +765,28 @@ def reinstall_wordpress_core(
                 print_error(f"Failed to reinstall WordPress core: {stderr}")
                 raise typer.Exit(code=1)
 
-            # Restore .htaccess backup if it exists
-            print_info("Restoring .htaccess...")
+            # Apply WordPress hardened .htaccess (official best practices)
+            print_info("Applying hardened .htaccess...")
+            from cli.utils.template import TemplateRenderer
+            renderer = TemplateRenderer()
+
+            htaccess_content = renderer.render('.htaccess-hardened.j2', {})
+
+            # Write hardened .htaccess
+            temp_htaccess = f"/tmp/.htaccess_hardened_{site_name}"
+            with open(temp_htaccess, 'w') as f:
+                f.write(htaccess_content)
+
+            # Copy to VPS and then to container
+            ssh.upload_file(temp_htaccess, temp_htaccess)
             ssh.run_command(
-                f"docker exec --user root {wp_container} mv /var/www/html/.htaccess.backup /var/www/html/.htaccess 2>/dev/null || true",
+                f"docker cp {temp_htaccess} {wp_container}:/var/www/html/.htaccess",
                 timeout=10
             )
+            ssh.run_command(f"rm -f {temp_htaccess}", timeout=5)
+
+            import os
+            os.remove(temp_htaccess)
 
             # Set correct permissions after reinstall (systematic)
             print_info("Setting permissions...")

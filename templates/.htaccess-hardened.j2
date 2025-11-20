@@ -1,0 +1,52 @@
+# BEGIN WordPress Hardening
+# Official WordPress security hardening rules
+# Reference: https://developer.wordpress.org/advanced-administration/security/hardening/
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+
+# Block access to include-only files in wp-admin
+RewriteRule ^wp-admin/includes/ - [F,L]
+
+# Block direct access to wp-includes PHP files (with exceptions)
+RewriteRule !^wp-includes/ - [S=3]
+RewriteRule ^wp-includes/[^/]+\.php$ - [F,L]
+RewriteRule ^wp-includes/js/tinymce/langs/.+\.php - [F,L]
+RewriteRule ^wp-includes/theme-compat/ - [F,L]
+</IfModule>
+
+# Protect wp-config.php
+<Files wp-config.php>
+Require all denied
+</Files>
+
+# Protect .htaccess itself
+<Files .htaccess>
+Require all denied
+</Files>
+
+# Disable directory browsing
+Options -Indexes
+
+# Prevent script execution in uploads directory
+# (This should be placed in wp-content/uploads/.htaccess)
+# <Files *.php>
+# Require all denied
+# </Files>
+# END WordPress Hardening
+
+# BEGIN WordPress
+# The directives (lines) between "BEGIN WordPress" and "END WordPress" are
+# dynamically generated, and should only be modified via WordPress filters.
+# Any changes to the directives between these markers will be overwritten.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+# END WordPress
