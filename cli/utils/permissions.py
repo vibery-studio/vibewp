@@ -30,48 +30,54 @@ class PermissionsManager:
         Returns:
             True if successful
         """
-        wpcli_container = f"{site_name}_wpcli"
+        # Use wp container (has root access) not wpcli (runs as www-data)
+        wp_container = f"{site_name}_wp"
 
         # Step 1: Set ownership to www-data:www-data
-        exit_code, _, _ = self.ssh.run_command(
-            f"docker exec --user root {wpcli_container} chown -R www-data:www-data /var/www/html",
+        exit_code, stdout, stderr = self.ssh.run_command(
+            f"docker exec --user root {wp_container} chown -R www-data:www-data /var/www/html",
             timeout=timeout
         )
         if exit_code != 0:
+            print(f"Failed to set ownership: {stderr}")
             return False
 
         # Step 2: Set core permissions (secure, read-only)
         # Directories: 755 (rwxr-xr-x)
-        exit_code, _, _ = self.ssh.run_command(
-            f"docker exec --user root {wpcli_container} find /var/www/html -type d -exec chmod 755 {{}} \\;",
+        exit_code, stdout, stderr = self.ssh.run_command(
+            f"docker exec --user root {wp_container} find /var/www/html -type d -exec chmod 755 {{}} \\;",
             timeout=timeout
         )
         if exit_code != 0:
+            print(f"Failed to set directory permissions: {stderr}")
             return False
 
         # Files: 644 (rw-r--r--)
-        exit_code, _, _ = self.ssh.run_command(
-            f"docker exec --user root {wpcli_container} find /var/www/html -type f -exec chmod 644 {{}} \\;",
+        exit_code, stdout, stderr = self.ssh.run_command(
+            f"docker exec --user root {wp_container} find /var/www/html -type f -exec chmod 644 {{}} \\;",
             timeout=timeout
         )
         if exit_code != 0:
+            print(f"Failed to set file permissions: {stderr}")
             return False
 
         # Step 3: Set wp-content permissions (group writable for WordPress operations)
         # Directories: 775 (rwxrwxr-x) - allows plugins to create folders
-        exit_code, _, _ = self.ssh.run_command(
-            f"docker exec --user root {wpcli_container} find /var/www/html/wp-content -type d -exec chmod 775 {{}} \\;",
+        exit_code, stdout, stderr = self.ssh.run_command(
+            f"docker exec --user root {wp_container} find /var/www/html/wp-content -type d -exec chmod 775 {{}} \\;",
             timeout=timeout
         )
         if exit_code != 0:
+            print(f"Failed to set wp-content directory permissions: {stderr}")
             return False
 
         # Files: 664 (rw-rw-r--) - allows plugins to write files
-        exit_code, _, _ = self.ssh.run_command(
-            f"docker exec --user root {wpcli_container} find /var/www/html/wp-content -type f -exec chmod 664 {{}} \\;",
+        exit_code, stdout, stderr = self.ssh.run_command(
+            f"docker exec --user root {wp_container} find /var/www/html/wp-content -type f -exec chmod 664 {{}} \\;",
             timeout=timeout
         )
         if exit_code != 0:
+            print(f"Failed to set wp-content file permissions: {stderr}")
             return False
 
         return True
