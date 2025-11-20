@@ -91,8 +91,18 @@ class WordPressManager:
             if exit_code != 0:
                 # Check if already installed
                 if "already installed" in stderr.lower() or "already installed" in stdout.lower():
+                    # Set permissions even if already installed
+                    from cli.utils.permissions import PermissionsManager
+                    perm_mgr = PermissionsManager(self.ssh)
+                    perm_mgr.set_wordpress_permissions(site_config['name'])
                     return True
                 raise RuntimeError(f"WordPress installation failed: {stderr}")
+
+            # Set correct permissions after installation (systematic)
+            from cli.utils.permissions import PermissionsManager
+            perm_mgr = PermissionsManager(self.ssh)
+            if not perm_mgr.set_wordpress_permissions(site_config['name']):
+                raise RuntimeError("Failed to set WordPress permissions")
 
             return True
 

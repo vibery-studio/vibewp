@@ -562,8 +562,11 @@ class BackupManager:
         if exit_code != 0:
             raise RuntimeError(f"File restore failed: {stderr}")
 
-        # Fix permissions
-        self.ssh.run_command(f"sudo chown -R www-data:www-data {site_path}/wordpress")
+        # Set correct permissions after restore (systematic)
+        from cli.utils.permissions import PermissionsManager
+        perm_mgr = PermissionsManager(self.ssh)
+        if not perm_mgr.set_wordpress_permissions(site_name):
+            raise RuntimeError("Failed to set permissions after restore")
 
     def download_backup(self, backup_id: str, site_name: str, local_path: str) -> None:
         """

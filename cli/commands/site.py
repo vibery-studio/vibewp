@@ -663,38 +663,18 @@ def fix_permissions(
         ssh.connect()
 
         try:
-            wpcli_container = f"{site_name}_wpcli"
-
             print_info("Fixing permissions...")
 
-            # Ensure proper ownership
-            with console.status("[cyan]Setting ownership...", spinner="dots"):
-                ssh.run_command(
-                    f"docker exec --user root {wpcli_container} chown -R www-data:www-data /var/www/html",
-                    timeout=60
-                )
+            # Use centralized permissions manager (systematic)
+            from cli.utils.permissions import PermissionsManager
+            perm_mgr = PermissionsManager(ssh)
 
-            # Core files: 755 for dirs, 644 for files
-            with console.status("[cyan]Setting core permissions...", spinner="dots"):
-                ssh.run_command(
-                    f"docker exec --user root {wpcli_container} find /var/www/html -type d -exec chmod 755 {{}} \\;",
-                    timeout=120
-                )
-                ssh.run_command(
-                    f"docker exec --user root {wpcli_container} find /var/www/html -type f -exec chmod 644 {{}} \\;",
-                    timeout=120
-                )
+            with console.status("[cyan]Setting WordPress permissions...", spinner="dots"):
+                success = perm_mgr.set_wordpress_permissions(site_name, timeout=120)
 
-            # wp-content: 775 for dirs, 664 for files (group writable)
-            with console.status("[cyan]Setting wp-content permissions...", spinner="dots"):
-                ssh.run_command(
-                    f"docker exec --user root {wpcli_container} find /var/www/html/wp-content -type d -exec chmod 775 {{}} \\;",
-                    timeout=120
-                )
-                ssh.run_command(
-                    f"docker exec --user root {wpcli_container} find /var/www/html/wp-content -type f -exec chmod 664 {{}} \\;",
-                    timeout=120
-                )
+            if not success:
+                print_error("Failed to set permissions")
+                raise typer.Exit(code=1)
 
             print_success("\n✓ Permissions fixed successfully")
             print_info("  • Plugins can now write files")
@@ -789,17 +769,12 @@ def reinstall_wordpress_core(
                 timeout=10
             )
 
-            # Ensure proper ownership after download
-            ssh.run_command(f"docker exec --user root {wpcli_container} chown -R www-data:www-data /var/www/html", timeout=30)
-
-            # Set WordPress recommended permissions (systematic approach)
-            # Core files: 755 for dirs, 644 for files (read-only)
-            ssh.run_command(f"docker exec --user root {wpcli_container} find /var/www/html -type d -exec chmod 755 {{}} \\;", timeout=60)
-            ssh.run_command(f"docker exec --user root {wpcli_container} find /var/www/html -type f -exec chmod 644 {{}} \\;", timeout=60)
-
-            # wp-content: 775 for dirs, 664 for files (group writable for plugins/uploads)
-            ssh.run_command(f"docker exec --user root {wpcli_container} find /var/www/html/wp-content -type d -exec chmod 775 {{}} \\;", timeout=60)
-            ssh.run_command(f"docker exec --user root {wpcli_container} find /var/www/html/wp-content -type f -exec chmod 664 {{}} \\;", timeout=60)
+            # Set correct permissions after reinstall (systematic)
+            print_info("Setting permissions...")
+            from cli.utils.permissions import PermissionsManager
+            perm_mgr = PermissionsManager(ssh)
+            if not perm_mgr.set_wordpress_permissions(site_name):
+                print_warning("Failed to set permissions, but core reinstall successful")
 
             # Verify installation
             exit_code, wp_version, stderr = ssh.run_command(
