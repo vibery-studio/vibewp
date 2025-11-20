@@ -16,7 +16,7 @@ from cli.utils.template import TemplateRenderer
 from cli.utils.credentials import CredentialGenerator
 from cli.utils.health import HealthChecker
 from cli.utils.wordpress import WordPressManager
-from cli.ui.console import print_success, print_error, print_info, print_warning
+from cli.ui.console import print_success, print_error, print_info, print_warning, confirm
 
 console = Console()
 app = typer.Typer(help="Site management commands")
