@@ -89,6 +89,7 @@ vibewp site stop <name>                 # Stop site containers
 vibewp site restart <name>              # Restart site containers
 vibewp site delete <name>               # Remove site completely
 vibewp site logs <name>                 # View container logs
+vibewp site fix-permissions <name>      # Fix file permissions (fixes write issues)
 vibewp site reinstall-core <name>       # Reinstall WordPress core (after hack)
 ```
 

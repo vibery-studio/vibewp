@@ -628,6 +628,87 @@ def site_logs(
         raise typer.Exit(code=1)
 
 
+@app.command("fix-permissions")
+def fix_permissions(
+    site_name: str = typer.Argument(..., help="Site name"),
+    force: bool = typer.Option(False, "--force", help="Skip confirmation")
+):
+    """Fix WordPress file permissions for proper operation"""
+    try:
+        config_mgr = ConfigManager()
+        config_mgr.load_config()
+
+        site = config_mgr.get_site(site_name)
+        if not site:
+            print_error(f"Site '{site_name}' not found")
+            raise typer.Exit(code=1)
+
+        if not force:
+            print_info("This will set WordPress recommended permissions:")
+            print_info("  • Core files: 755 (dirs) / 644 (files)")
+            print_info("  • wp-content: 775 (dirs) / 664 (files)")
+            print_info("  • Owner: www-data:www-data")
+
+            if not confirm("\nContinue?", default=True):
+                print_info("Operation cancelled")
+                raise typer.Exit()
+
+        # Connect to VPS
+        ssh = SSHManager(
+            host=config_mgr.vps.host,
+            port=config_mgr.vps.port,
+            user=config_mgr.vps.user,
+            key_path=config_mgr.vps.key_path
+        )
+        ssh.connect()
+
+        try:
+            wpcli_container = f"{site_name}_wpcli"
+
+            print_info("Fixing permissions...")
+
+            # Ensure proper ownership
+            with console.status("[cyan]Setting ownership...", spinner="dots"):
+                ssh.run_command(
+                    f"docker exec --user root {wpcli_container} chown -R www-data:www-data /var/www/html",
+                    timeout=60
+                )
+
+            # Core files: 755 for dirs, 644 for files
+            with console.status("[cyan]Setting core permissions...", spinner="dots"):
+                ssh.run_command(
+                    f"docker exec --user root {wpcli_container} find /var/www/html -type d -exec chmod 755 {{}} \\;",
+                    timeout=120
+                )
+                ssh.run_command(
+                    f"docker exec --user root {wpcli_container} find /var/www/html -type f -exec chmod 644 {{}} \\;",
+                    timeout=120
+                )
+
+            # wp-content: 775 for dirs, 664 for files (group writable)
+            with console.status("[cyan]Setting wp-content permissions...", spinner="dots"):
+                ssh.run_command(
+                    f"docker exec --user root {wpcli_container} find /var/www/html/wp-content -type d -exec chmod 775 {{}} \\;",
+                    timeout=120
+                )
+                ssh.run_command(
+                    f"docker exec --user root {wpcli_container} find /var/www/html/wp-content -type f -exec chmod 664 {{}} \\;",
+                    timeout=120
+                )
+
+            print_success("\n✓ Permissions fixed successfully")
+            print_info("  • Plugins can now write files")
+            print_info("  • Uploads directory is writable")
+            print_info("  • Core files remain secure")
+
+        finally:
+            ssh.disconnect()
+
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(code=1)
+
+
 @app.command("reinstall-core")
 def reinstall_wordpress_core(
     site_name: str = typer.Argument(..., help="Site name"),
@@ -711,9 +792,14 @@ def reinstall_wordpress_core(
             # Ensure proper ownership after download
             ssh.run_command(f"docker exec --user root {wpcli_container} chown -R www-data:www-data /var/www/html", timeout=30)
 
-            # Set recommended permissions: 755 for directories, 644 for files
+            # Set WordPress recommended permissions (systematic approach)
+            # Core files: 755 for dirs, 644 for files (read-only)
             ssh.run_command(f"docker exec --user root {wpcli_container} find /var/www/html -type d -exec chmod 755 {{}} \\;", timeout=60)
             ssh.run_command(f"docker exec --user root {wpcli_container} find /var/www/html -type f -exec chmod 644 {{}} \\;", timeout=60)
+
+            # wp-content: 775 for dirs, 664 for files (group writable for plugins/uploads)
+            ssh.run_command(f"docker exec --user root {wpcli_container} find /var/www/html/wp-content -type d -exec chmod 775 {{}} \\;", timeout=60)
+            ssh.run_command(f"docker exec --user root {wpcli_container} find /var/www/html/wp-content -type f -exec chmod 664 {{}} \\;", timeout=60)
 
             # Verify installation
             exit_code, wp_version, stderr = ssh.run_command(
