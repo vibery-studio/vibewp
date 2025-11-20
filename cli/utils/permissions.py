@@ -1,4 +1,16 @@
-"""Centralized WordPress permissions management"""
+"""Centralized WordPress permissions management
+
+IMPORTANT CONTAINER USAGE:
+- Use {site}_wp container for ALL root operations (chown, chmod)
+- Use {site}_wpcli container ONLY for WP-CLI commands as www-data
+- wpcli runs as user 33:33 (www-data), cannot use --user root
+- wp container has full root access
+
+Systematic Rules:
+1. Root operations (chown/chmod) → {site}_wp container
+2. WP-CLI as www-data → {site}_wpcli container
+3. Never use --user root with wpcli container
+"""
 
 from cli.utils.ssh import SSHManager
 

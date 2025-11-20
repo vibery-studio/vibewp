@@ -738,6 +738,8 @@ def reinstall_wordpress_core(
         ssh.connect()
 
         try:
+            # Use wp container for root operations (systematic)
+            wp_container = f"{site_name}_wp"
             wpcli_container = f"{site_name}_wpcli"
             version_str = version if version else "latest"
 
@@ -746,15 +748,15 @@ def reinstall_wordpress_core(
             # Backup .htaccess before reinstall (may contain security rules or custom config)
             print_info("Backing up .htaccess...")
             ssh.run_command(
-                f"docker exec --user root {wpcli_container} cp /var/www/html/.htaccess /var/www/html/.htaccess.backup 2>/dev/null || true",
+                f"docker exec --user root {wp_container} cp /var/www/html/.htaccess /var/www/html/.htaccess.backup 2>/dev/null || true",
                 timeout=10
             )
 
-            # Run as root to handle any permission scenarios
+            # Run WP-CLI as root via wp container (has root access)
             # This is safe as we're only replacing core files, not touching wp-content
             version_arg = f"--version={version}" if version else ""
             exit_code, stdout, stderr = ssh.run_command(
-                f"docker exec --user root {wpcli_container} wp core download --force --skip-content --allow-root {version_arg}",
+                f"docker exec --user root {wp_container} wp core download --force --skip-content --allow-root {version_arg}",
                 timeout=120
             )
 
@@ -765,7 +767,7 @@ def reinstall_wordpress_core(
             # Restore .htaccess backup if it exists
             print_info("Restoring .htaccess...")
             ssh.run_command(
-                f"docker exec --user root {wpcli_container} mv /var/www/html/.htaccess.backup /var/www/html/.htaccess 2>/dev/null || true",
+                f"docker exec --user root {wp_container} mv /var/www/html/.htaccess.backup /var/www/html/.htaccess 2>/dev/null || true",
                 timeout=10
             )
 
