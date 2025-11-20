@@ -1,15 +1,23 @@
 """Centralized WordPress permissions management
 
-IMPORTANT CONTAINER USAGE:
-- Use {site}_wp container for ALL root operations (chown, chmod)
-- Use {site}_wpcli container ONLY for WP-CLI commands as www-data
-- wpcli runs as user 33:33 (www-data), cannot use --user root
-- wp container has full root access
+IMPORTANT CONTAINER USAGE RULES (SYSTEMATIC):
+
+Container Architecture:
+- {site}_wp: wordpress:latest image (has root, NO wp-cli)
+- {site}_wpcli: wordpress:cli image (has wp-cli, runs as www-data)
 
 Systematic Rules:
-1. Root operations (chown/chmod) → {site}_wp container
-2. WP-CLI as www-data → {site}_wpcli container
-3. Never use --user root with wpcli container
+1. File operations (chown/chmod/cp/mv) → {site}_wp container with --user root
+2. WP-CLI commands (wp core/plugin/...) → {site}_wpcli container
+3. wpcli can use --allow-root for operations needing elevated permissions
+4. NEVER run chmod/chown in wpcli (will fail silently as www-data)
+
+Examples:
+✓ docker exec --user root {site}_wp chown -R www-data:www-data /var/www/html
+✓ docker exec --user root {site}_wp chmod 755 /var/www/html
+✓ docker exec {site}_wpcli wp core download --allow-root
+✗ docker exec --user root {site}_wpcli chmod 755 /var/www/html (no root access)
+✗ docker exec {site}_wp wp core download (no wp-cli installed)
 """
 
 from cli.utils.ssh import SSHManager

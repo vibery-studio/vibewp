@@ -752,11 +752,12 @@ def reinstall_wordpress_core(
                 timeout=10
             )
 
-            # Run WP-CLI as root via wp container (has root access)
+            # Run WP-CLI via wpcli container (has wp-cli installed)
+            # Use --allow-root since we need to overwrite core files
             # This is safe as we're only replacing core files, not touching wp-content
             version_arg = f"--version={version}" if version else ""
             exit_code, stdout, stderr = ssh.run_command(
-                f"docker exec --user root {wp_container} wp core download --force --skip-content --allow-root {version_arg}",
+                f"docker exec {wpcli_container} wp core download --force --skip-content --allow-root {version_arg}",
                 timeout=120
             )
 
