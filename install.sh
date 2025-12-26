@@ -16,13 +16,13 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # Check if running on Ubuntu
 if [[ ! -f /etc/os-release ]] || ! grep -q "Ubuntu" /etc/os-release; then
-    error "This installer only supports Ubuntu 22.04 and 24.04"
+    error "This installer only supports Ubuntu 22.04, 24.04, and 25.04"
 fi
 
 # Check Ubuntu version
 VERSION=$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)
-if [[ "$VERSION" != "22.04" && "$VERSION" != "24.04" ]]; then
-    error "Ubuntu $VERSION is not supported. Only 22.04 and 24.04 are supported."
+if [[ "$VERSION" != "22.04" && "$VERSION" != "24.04" && "$VERSION" != "25.04" ]]; then
+    error "Ubuntu $VERSION is not supported. Only 22.04, 24.04, and 25.04 are supported."
 fi
 
 log "Installing VibeWP on Ubuntu $VERSION..."
