@@ -100,23 +100,15 @@ Each site runs in isolated Docker network with separate database, filesystem, an
 
 ## Configuration
 
-Stored at `~/.vibewp/sites.yaml`:
+Config auto-generated at `~/.vibewp/sites.yaml` during installation.
 
-```yaml
-vps:
-  host: "YOUR_VPS_IP"
-  port: 22
-  user: "root"
-  key_path: "~/.ssh/id_rsa"
-  install_method: "pip"
-  wpscan_api_token: "optional"
-
-sites:
-  sitename:
-    domain: "example.com"
-    type: "frankenwp"
-    status: "running"
+```bash
+vibewp config show          # View current config
+vibewp config edit          # Edit config file
 ```
+
+Optional settings:
+- `wpscan_api_token` - For vulnerability scanning (free at wpscan.com)
 
 ## Troubleshooting
 
