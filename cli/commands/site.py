@@ -297,6 +297,35 @@ def create_site(
                     # Make configure script executable
                     exit_code, _, _ = ssh.run_command(f"chmod +x {remote_dir}/config/ols/configure-ols.sh")
 
+                # Upload Caddyfile for FrankenWP (shinsenter/frankenphp requires external Caddyfile)
+                if wp_type == "frankenwp":
+                    progress.update(task, description="Uploading Caddyfile...")
+                    import shutil
+                    from pathlib import Path
+
+                    template_base = Path(__file__).parent.parent.parent / "templates" / "frankenwp"
+                    caddyfile_src = template_base / "Caddyfile"
+
+                    if caddyfile_src.exists():
+                        temp_caddyfile = f"/tmp/{site_name}_Caddyfile"
+                        shutil.copy(str(caddyfile_src), temp_caddyfile)
+                        ssh.upload_file(temp_caddyfile, f"{remote_dir}/Caddyfile")
+                        os.remove(temp_caddyfile)
+                    else:
+                        print_info("Warning: Caddyfile template not found, using inline config")
+                        caddyfile_content = """{
+    frankenphp
+    order php_server before file_server
+    auto_https off
+}
+
+:80 {
+    root * /var/www/html
+    encode gzip
+    php_server
+}"""
+                        ssh.run_command(f"cat > {remote_dir}/Caddyfile << 'CADDYEOF'\n{caddyfile_content}\nCADDYEOF")
+
                 # Deploy containers
                 progress.update(task, description=f"Deploying {wp_type} containers...")
                 exit_code, stdout, stderr = ssh.run_command(

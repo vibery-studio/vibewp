@@ -1,0 +1,11 @@
+{
+    frankenphp
+    order php_server before file_server
+    auto_https off
+}
+
+:80 {
+    root * /var/www/html
+    encode gzip
+    php_server
+}

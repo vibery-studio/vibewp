@@ -1,9 +1,8 @@
 services:
   wordpress:
-    image: vibewp/frankenwp:latest
+    image: shinsenter/frankenphp:latest
     container_name: {{ site_name }}_wp
     environment:
-      # WordPress database configuration (official pattern)
 {% if db_mode == 'shared' %}
       WORDPRESS_DB_HOST: vibewp_shared_db
 {% else %}
@@ -15,6 +14,7 @@ services:
       MYSQL_SSL: "false"
     volumes:
       - wp_data:/var/www/html
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     networks:
 {% if db_mode == 'shared' %}
       - proxy
@@ -41,7 +41,7 @@ services:
   wpcli:
     image: wordpress:cli
     container_name: {{ site_name }}_wpcli
-    user: "82:82"
+    user: "33:33"
     environment:
       # WP-CLI uses standard WordPress env vars
 {% if db_mode == 'shared' %}

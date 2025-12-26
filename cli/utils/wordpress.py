@@ -109,6 +109,17 @@ class WordPressManager:
             if exit_code != 0:
                 raise RuntimeError(f"Failed to create wp-config.php: {stderr}")
 
+            # 1.5 Add SSL proxy detection for reverse proxy setups (Caddy/nginx)
+            # This ensures WordPress trusts HTTPS from the reverse proxy
+            ssl_fix_cmd = f'''docker exec -u root {container_name} php -r "
+                \\$f = '{wp_path}/wp-config.php';
+                \\$c = file_get_contents(\\$f);
+                \\$ssl = \\"\\n// Force HTTPS behind reverse proxy\\nif (isset(\\\\\\$_SERVER['HTTP_X_FORWARDED_PROTO']) && \\\\\\$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {{\\n    \\\\\\$_SERVER['HTTPS'] = 'on';\\n}}\\n\\";
+                \\$c = str_replace('<?php', '<?php' . \\$ssl, \\$c);
+                file_put_contents(\\$f, \\$c);
+            "'''
+            self.ssh.run_command(ssl_fix_cmd, timeout=30)
+
             # 2. Install WordPress (as root)
             cmd = f"""docker exec -u root {container_name} {php_flags} core install \\
                 --path={wp_path} \\
