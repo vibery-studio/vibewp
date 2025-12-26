@@ -94,9 +94,14 @@ VibeWP uses Docker container orchestration with Caddy reverse proxy for automati
 {{ db_name }}           # Database name
 {{ db_user }}           # Database user
 {{ db_password }}       # Database password
-{{ num_workers }}       # FrankenPHP worker count (default: 2)
-{{ www_redirect }}      # Redirect www to non-www (optional)
+{{ db_mode }}           # Database mode: 'dedicated' or 'shared'
 ```
+
+**Environment Variables** (auto-configured):
+- `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` - Database connection
+- `SERVER_NAME` - Domain for FrankenPHP
+- `FORCE_HTTPS` - Always "true" (Caddy handles SSL)
+- `CACHE_LOC`, `TTL`, `BYPASS_PATH_PREFIX` - Souin cache settings
 
 ### 3. OpenLiteSpeed Stack
 

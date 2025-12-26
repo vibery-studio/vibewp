@@ -139,7 +139,7 @@ def proxy_status():
 
 @app.command("logs")
 def proxy_logs(
-    tail: int = typer.Option(100, "--tail", "-n", help="Number of lines to show"),
+    tail: int = typer.Option(100, "--tail", help="Number of lines to show"),
     follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output")
 ):
     """Show Caddy proxy logs"""

@@ -105,7 +105,7 @@ class WordPressAuditor:
     def _audit_core_version(self, container: str, site: str, wp_type: str) -> List[Dict]:
         """Check WordPress core version"""
         findings = []
-        wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
+        wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else "/var/www/vhosts"
 
         # Get current WP version
         exit_code, current_version, _ = self.ssh.run_command(
@@ -168,7 +168,7 @@ class WordPressAuditor:
         """Audit WordPress file permissions"""
         findings = []
 
-        if wp_type == "frankenwp":
+        if wp_type in ["frankenwp", "wordpress"]:
             wp_path = "/var/www/html"
             config_path = f"{wp_path}/wp-config.php"
             uploads_path = f"{wp_path}/wp-content/uploads"
@@ -221,7 +221,7 @@ class WordPressAuditor:
         """Audit wp-config.php security settings"""
         findings = []
 
-        if wp_type == "frankenwp":
+        if wp_type in ["frankenwp", "wordpress"]:
             config_path = "/var/www/html/wp-config.php"
         else:
             config_path = f"/var/www/vhosts/{domain}/wp-config.php"
@@ -302,7 +302,7 @@ class WordPressAuditor:
     def _audit_plugins(self, container: str, site: str, wp_type: str) -> List[Dict]:
         """Audit WordPress plugins"""
         findings = []
-        wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
+        wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else "/var/www/vhosts"
 
         # Get list of plugins
         exit_code, plugins_json, _ = self.ssh.run_command(
@@ -350,7 +350,7 @@ class WordPressAuditor:
     def _audit_themes(self, container: str, site: str, wp_type: str) -> List[Dict]:
         """Audit WordPress themes"""
         findings = []
-        wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
+        wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else "/var/www/vhosts"
 
         # Check for theme updates
         exit_code, updates, _ = self.ssh.run_command(
@@ -394,7 +394,7 @@ class WordPressAuditor:
     def _audit_users(self, container: str, site: str, wp_type: str) -> List[Dict]:
         """Audit WordPress users"""
         findings = []
-        wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
+        wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else "/var/www/vhosts"
 
         # Get list of administrator users
         exit_code, admins, _ = self.ssh.run_command(

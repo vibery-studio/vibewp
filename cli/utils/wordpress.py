@@ -1,5 +1,6 @@
 """WordPress management utilities for VibeWP CLI"""
 
+import base64
 import shlex
 from typing import Dict, Optional
 
@@ -67,7 +68,7 @@ class WordPressManager:
         """
         try:
             # Determine WordPress path based on type
-            wp_path = "/var/www/html" if wp_type == "frankenwp" else f"/var/www/vhosts/{site_config['domain']}"
+            wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else f"/var/www/vhosts/{site_config['domain']}"
 
             # Escape all user inputs to prevent command injection
             safe_title = shlex.quote(site_config.get('site_title', site_config['domain']))
@@ -77,14 +78,46 @@ class WordPressManager:
             safe_url = shlex.quote(f"https://{site_config['domain']}")
 
             # Build WP-CLI command with escaped parameters
-            cmd = f"""docker exec -u www-data {container_name} wp core install \\
+            # Build WP-CLI command with escaped parameters
+            # 1. Create wp-config.php
+            safe_db_name = shlex.quote(site_config['db_name'])
+            safe_db_user = shlex.quote(site_config['db_user'])
+            safe_db_pass = shlex.quote(site_config['db_password'])
+            safe_db_host = shlex.quote(site_config['db_host'])
+
+            # Use PHP flags for memory limit
+            php_flags = "php -d memory_limit=512M /usr/local/bin/wp"
+
+            # Wait for database container to be healthy (depends_on healthcheck should handle this)
+            # But add extra wait for MariaDB user initialization (separate from container health)
+            import time
+            time.sleep(20)  # Give MariaDB extra time to initialize users after becoming "healthy"
+
+            # Create wp-config.php using PHP (more robust than sed for special chars in password)
+            # Base64-encode password to avoid shell/quote escaping issues
+            db_pass_b64 = base64.b64encode(site_config['db_password'].encode()).decode()
+            cmd_config = f"""docker exec -u root {container_name} php -r "
+                \\$config = file_get_contents('{wp_path}/wp-config-sample.php');
+                \\$config = str_replace('database_name_here', '{site_config["db_name"]}', \\$config);
+                \\$config = str_replace('username_here', '{site_config["db_user"]}', \\$config);
+                \\$config = str_replace('password_here', base64_decode('{db_pass_b64}'), \\$config);
+                \\$config = str_replace('localhost', '{site_config["db_host"]}', \\$config);
+                file_put_contents('{wp_path}/wp-config.php', \\$config);
+            " """
+
+            exit_code, stdout, stderr = self.ssh.run_command(cmd_config, timeout=60)
+            if exit_code != 0:
+                raise RuntimeError(f"Failed to create wp-config.php: {stderr}")
+
+            # 2. Install WordPress (as root)
+            cmd = f"""docker exec -u root {container_name} {php_flags} core install \\
                 --path={wp_path} \\
                 --url={safe_url} \\
                 --title={safe_title} \\
                 --admin_user={safe_user} \\
                 --admin_password={safe_password} \\
                 --admin_email={safe_email} \\
-                --skip-email"""
+                --skip-email --allow-root"""
 
             exit_code, stdout, stderr = self.ssh.run_command(cmd, timeout=120)
 
@@ -94,14 +127,14 @@ class WordPressManager:
                     # Set permissions even if already installed
                     from cli.utils.permissions import PermissionsManager
                     perm_mgr = PermissionsManager(self.ssh)
-                    perm_mgr.set_wordpress_permissions(site_config['name'])
+                    perm_mgr.set_wordpress_permissions(site_config['name'], wp_type, domain=site_config.get('domain'))
                     return True
                 raise RuntimeError(f"WordPress installation failed: {stderr}")
 
             # Set correct permissions after installation (systematic)
             from cli.utils.permissions import PermissionsManager
             perm_mgr = PermissionsManager(self.ssh)
-            if not perm_mgr.set_wordpress_permissions(site_config['name']):
+            if not perm_mgr.set_wordpress_permissions(site_config['name'], wp_type, domain=site_config.get('domain')):
                 raise RuntimeError("Failed to set WordPress permissions")
 
             return True
@@ -130,7 +163,7 @@ class WordPressManager:
         """
         try:
             # Determine WordPress path based on type
-            if wp_type == "frankenwp":
+            if wp_type in ["frankenwp", "wordpress"]:
                 wp_path = "/var/www/html"
             else:  # ols
                 if not domain:
@@ -173,7 +206,7 @@ class WordPressManager:
             True if installation successful
         """
         try:
-            wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
+            wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else "/var/www/vhosts"
             safe_plugin = shlex.quote(plugin_slug)
 
             cmd = f"docker exec {container_name} wp plugin install {safe_plugin} --path={wp_path} --allow-root"
@@ -206,7 +239,7 @@ class WordPressManager:
             WordPress version string or None if error
         """
         try:
-            wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
+            wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else "/var/www/vhosts"
 
             exit_code, stdout, stderr = self.ssh.run_command(
                 f"docker exec {container_name} wp core version --path={wp_path} --allow-root",
@@ -246,7 +279,7 @@ class WordPressManager:
             from cli.utils.credentials import CredentialGenerator
 
             password = CredentialGenerator.generate_password(16, False)
-            wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
+            wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else "/var/www/vhosts"
 
             safe_username = shlex.quote(username)
             safe_email = shlex.quote(email)
@@ -289,7 +322,7 @@ class WordPressManager:
             True if update successful
         """
         try:
-            wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
+            wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else "/var/www/vhosts"
 
             safe_option_name = shlex.quote(option_name)
             safe_option_value = shlex.quote(option_value)

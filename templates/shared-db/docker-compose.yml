@@ -25,6 +25,8 @@ services:
       --innodb_log_file_size=256M
       --innodb_flush_log_at_trx_commit=2
       --innodb_flush_method=O_DIRECT
+      --innodb-use-native-aio=0
+      --skip-ssl
 
 volumes:
   db_data:

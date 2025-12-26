@@ -1,9 +1,13 @@
+{# WordPress Official Stack Template
+   Uses: wordpress:latest (Apache + mod_php)
+   Pros: Most stable, widest compatibility, official support
+   Cons: Slower than FrankenPHP/OLS, more memory usage
+#}
 services:
   wordpress:
-    image: vibewp/frankenwp:latest
+    image: wordpress:latest
     container_name: {{ site_name }}_wp
     environment:
-      # WordPress database configuration (official pattern)
 {% if db_mode == 'shared' %}
       WORDPRESS_DB_HOST: vibewp_shared_db
 {% else %}
@@ -12,7 +16,7 @@ services:
       WORDPRESS_DB_USER: {{ db_user }}
       WORDPRESS_DB_PASSWORD: "{{ db_password | replace('$', '$$') }}"
       WORDPRESS_DB_NAME: {{ db_name }}
-      MYSQL_SSL: "false"
+      WORDPRESS_TABLE_PREFIX: wp_
     volumes:
       - wp_data:/var/www/html
     networks:
@@ -41,9 +45,8 @@ services:
   wpcli:
     image: wordpress:cli
     container_name: {{ site_name }}_wpcli
-    user: "82:82"
+    user: "33:33"
     environment:
-      # WP-CLI uses standard WordPress env vars
 {% if db_mode == 'shared' %}
       WORDPRESS_DB_HOST: vibewp_shared_db:3306
 {% else %}
@@ -55,7 +58,6 @@ services:
       WP_CLI_CACHE_DIR: /var/www/html/.wp-cli/cache
       PHP_MEMORY_LIMIT: 512M
       MYSQL_SSL: "false"
-      MYSQL_HOME: /tmp
     volumes:
       - wp_data:/var/www/html
     working_dir: /var/www/html
@@ -71,7 +73,7 @@ services:
         condition: service_healthy
 {% endif %}
     entrypoint: sh
-    command: -c "printf '[client]\\nssl=0' > /tmp/my.cnf && sleep infinity"
+    command: -c "sleep infinity"
 
 {% if db_mode == 'dedicated' %}
   db:
@@ -94,13 +96,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-    command: >
-      --default-authentication-plugin=mysql_native_password
-      --max_connections=100
-      --innodb_buffer_pool_size=256M
-      --innodb_log_file_size=64M
-      --innodb-use-native-aio=0
-      --skip-ssl
+    command: --innodb-use-native-aio=0 --skip-ssl
 {% endif %}
 
 volumes:

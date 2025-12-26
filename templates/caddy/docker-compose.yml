@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   caddy:
-    image: lucaslorentz/caddy-docker-proxy:2.3
+    image: lucaslorentz/caddy-docker-proxy:2.9.1
     container_name: caddy_proxy
     ports:
       - "80:80"

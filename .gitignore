@@ -7,3 +7,11 @@ is_rsa_vibery_test*
 __pycache__/
 *.egg-info/
 .DS_Store
+
+# Temp files
+*.bak
+*.bak2
+repomix-output.xml
+vibewp-fix.tar.gz
+docker-compose.debug.yml
+install_test.sh

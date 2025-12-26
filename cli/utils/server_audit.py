@@ -184,7 +184,7 @@ class ServerAuditManager:
             return {'error': 'Vulnerability scanner not initialized'}
 
         container_name = f"{site_name}-wp"
-        wp_path = "/var/www/html" if wp_type == "frankenwp" else "/var/www/vhosts"
+        wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else "/var/www/vhosts"
 
         findings = []
 

@@ -14,7 +14,7 @@ app = typer.Typer(help="Backup and restore operations")
 @app.command("create")
 def create_backup(
     site_name: str = typer.Argument(..., help="Site name to backup"),
-    compress: bool = typer.Option(True, help="Compress backup (tar.gz)"),
+    compress: bool = typer.Option(True, "--compress", help="Compress backup (tar.gz)"),
     remote: bool = typer.Option(False, "--remote", help="Upload backup to remote S3 storage"),
     exclude_uploads: bool = typer.Option(False, "--exclude-uploads", help="Skip uploads directory for faster backup")
 ):

@@ -23,7 +23,7 @@ class CredentialGenerator:
         alphabet = string.ascii_letters + string.digits
         if special_chars:
             # Use shell-safe special characters
-            alphabet += "!@#$%^&*-_=+"
+            alphabet += "!@#^*-_=+"
 
         return ''.join(secrets.choice(alphabet) for _ in range(length))
 
@@ -41,6 +41,9 @@ class CredentialGenerator:
         """
         # Generate secure passwords
         db_password = CredentialGenerator.generate_password(32, True)
+        # Sanitize site_name for database (replace hyphens with underscores)
+        # MariaDB has issues with hyphens in database names in GRANT statements
+        db_safe_name = site_name.replace('-', '_')
         db_root_password = CredentialGenerator.generate_password(32, True)
         wp_admin_password = CredentialGenerator.generate_password(16, False)
 
@@ -49,8 +52,8 @@ class CredentialGenerator:
 
         return {
             # Database credentials
-            'db_name': f'wp_{site_name}',
-            'db_user': f'wp_{site_name}_user',
+            'db_name': f'wp_{db_safe_name}',
+            'db_user': f'wp_{db_safe_name}_user',
             'db_password': db_password,
             'db_root_password': db_root_password,
 

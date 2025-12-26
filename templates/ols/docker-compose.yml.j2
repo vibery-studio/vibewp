@@ -1,3 +1,14 @@
+{# OpenLiteSpeed Stack Template
+   Uses: litespeedtech/openlitespeed:latest
+   Pros: High performance, LSCache support, enterprise-grade
+   Cons: Requires custom vhost configuration
+
+   Auto-configuration:
+   - Custom entrypoint script configures vhost on startup
+   - Maps domain to /var/www/vhosts/{{ domain }}
+   - Configures listeners and PHP processing
+   - Supports .htaccess rewrite rules
+#}
 version: '3.8'
 
 services:
@@ -7,8 +18,7 @@ services:
     environment:
       - DOMAIN={{ domain }}
       - LSWS_USER={{ lsws_admin_user | default('admin') }}
-      - LSWS_PASS={{ lsws_admin_pass }}
-      - SERVER_ROOT=/var/www/vhosts/{{ domain }}
+      - LSWS_PASS={{ lsws_admin_pass | replace('$', '$$') }}
       - LS_OLS_ENABLE_LSCACHE=true
       # Redis configuration for object caching
 {% if db_mode == 'shared' %}
@@ -17,7 +27,7 @@ services:
       - WORDPRESS_DB_HOST=mysql
 {% endif %}
       - WORDPRESS_DB_USER={{ db_user }}
-      - WORDPRESS_DB_PASSWORD={{ db_password }}
+      - WORDPRESS_DB_PASSWORD={{ db_password | replace('$', '$$') }}
       - WORDPRESS_DB_NAME={{ db_name }}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -27,6 +37,11 @@ services:
       - lsws_admin_conf:/usr/local/lsws/admin/conf
       - acme:/root/.acme.sh
       - lsws_logs:/usr/local/lsws/logs
+      # Custom configuration files
+      - ./config/ols/vhconf.conf.template:/tmp/vhconf.conf.template:ro
+      - ./config/ols/configure-ols.sh:/usr/local/bin/configure-ols.sh:ro
+    entrypoint: ["/bin/bash", "/usr/local/bin/configure-ols.sh"]
+    command: []
     networks:
 {% if db_mode == 'shared' %}
       - proxy
@@ -37,13 +52,7 @@ services:
     labels:
       # Caddy proxy configuration
       caddy: {{ domain }}
-      caddy.reverse_proxy: "{{ '{{upstreams 80}}' }}"
-      # Enable auto HTTPS
-      caddy.tls: "internal"
-      # Optional: www redirect
-      {% if www_redirect %}caddy.redir: "www.{{ domain }} {{ domain }}"{% endif %}
-      # Admin panel (internal only)
-      caddy.{{ domain }}/admin: "reverse_proxy {{ '{{upstreams 7080}}' }}"
+      caddy.reverse_proxy: "{{ '{{upstreams 8088}}' }}"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
@@ -66,10 +75,14 @@ services:
       WORDPRESS_DB_HOST: mysql:3306
 {% endif %}
       WORDPRESS_DB_USER: {{ db_user }}
-      WORDPRESS_DB_PASSWORD: "{{ db_password }}"
+      WORDPRESS_DB_PASSWORD: "{{ db_password | replace('$', '$$') }}"
       WORDPRESS_DB_NAME: {{ db_name }}
+      WP_CLI_CACHE_DIR: /var/www/vhosts/{{ domain }}/.wp-cli/cache
+      PHP_MEMORY_LIMIT: 512M
+      MYSQL_SSL: "false"
     volumes:
       - ./sites/{{ site_name }}:/var/www/vhosts/{{ domain }}
+    working_dir: /var/www/vhosts/{{ domain }}
     networks:
 {% if db_mode == 'shared' %}
       - proxy
@@ -91,7 +104,7 @@ services:
     environment:
       MYSQL_DATABASE: {{ db_name }}
       MYSQL_USER: {{ db_user }}
-      MYSQL_PASSWORD: "{{ db_password }}"
+      MYSQL_PASSWORD: "{{ db_password | replace('$', '$$') }}"
       MYSQL_RANDOM_ROOT_PASSWORD: '1'
       MYSQL_INITDB_SKIP_TZINFO: '1'
     volumes:
@@ -112,6 +125,8 @@ services:
       --innodb_log_file_size=128M
       --query_cache_size=32M
       --query_cache_type=1
+      --innodb-use-native-aio=0
+      --skip-ssl
 {% endif %}
 
   redis:
@@ -150,7 +165,7 @@ services:
 {% endif %}
       PMA_PORT: 3306
       PMA_USER: {{ db_user }}
-      PMA_PASSWORD: "{{ db_password }}"
+      PMA_PASSWORD: "{{ db_password | replace('$', '$$') }}"
       UPLOAD_LIMIT: 128M
     networks:
 {% if db_mode == 'shared' %}

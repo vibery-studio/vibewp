@@ -53,7 +53,7 @@ def rollback_site_creation(site_name: str, ssh: SSHManager, remote_dir: str):
 def create_site(
     site_name: Optional[str] = typer.Option(None, help="Site name (alphanumeric)"),
     domain: Optional[str] = typer.Option(None, help="Domain name"),
-    wp_type: Optional[str] = typer.Option(None, help="WordPress type (frankenwp/ols)"),
+    wp_type: Optional[str] = typer.Option(None, help="WordPress type (wordpress/frankenwp/ols)"),
     admin_email: Optional[str] = typer.Option(None, help="Admin email"),
     site_title: Optional[str] = typer.Option(None, help="Site title"),
     db_mode: Optional[str] = typer.Option(None, "--db-mode", help="Database mode (shared/dedicated, defaults to config)"),
@@ -88,14 +88,16 @@ def create_site(
 
         if not wp_type or not isinstance(wp_type, str):
             console.print("\n[bold cyan]Choose WordPress Engine:[/bold cyan]")
-            console.print("  [green]1. frankenwp[/green] - FrankenPHP (high performance, Go-based)")
-            console.print("  [green]2. ols[/green] - OpenLiteSpeed (proven stability, LiteSpeed Cache)")
+            console.print("  [green]1. frankenwp[/green] - FrankenPHP (fastest, Go-based, worker mode)")
+            console.print("  [green]2. wordpress[/green] - Official WordPress (Apache, most stable)")
+            console.print("  [green]3. ols[/green] - OpenLiteSpeed (LiteSpeed Cache, .htaccess support)")
             wp_choice = typer.prompt("Select engine", type=int, default=1)
-            wp_type = "frankenwp" if wp_choice == 1 else "ols"
+            wp_type_map = {1: "frankenwp", 2: "wordpress", 3: "ols"}
+            wp_type = wp_type_map.get(wp_choice, "frankenwp")
 
         wp_type = str(wp_type).strip().lower()
-        if wp_type not in ["frankenwp", "ols"]:
-            print_error("Invalid WordPress type. Choose 'frankenwp' or 'ols'")
+        if wp_type not in ["wordpress", "frankenwp", "ols"]:
+            print_error("Invalid WordPress type. Choose 'wordpress', 'frankenwp', or 'ols'")
             raise typer.Exit(code=1)
 
         if not admin_email or not isinstance(admin_email, str):
@@ -138,6 +140,12 @@ def create_site(
         creds['domain'] = domain
         creds['site_title'] = site_title
         creds['db_mode'] = db_mode
+
+        # For OLS sites, allocate unique admin port (7080 + site_count)
+        if wp_type == 'ols':
+            existing_sites = config_mgr.get_sites()
+            ols_count = sum(1 for s in existing_sites if s.type == 'ols')
+            creds['admin_port'] = 7080 + ols_count
 
         # Render docker-compose template
         with Progress(
@@ -262,6 +270,33 @@ def create_site(
                 ssh.upload_file(local_compose_path, f"{remote_dir}/docker-compose.yml")
                 os.remove(local_compose_path)
 
+                # Upload OLS configuration files if using OLS template
+                if wp_type == "ols":
+                    progress.update(task, description="Uploading OLS configuration...")
+                    import shutil
+                    from pathlib import Path
+
+                    # Create config directory on remote
+                    exit_code, _, _ = ssh.run_command(f"mkdir -p {remote_dir}/config/ols")
+                    if exit_code != 0:
+                        print_info("Warning: Could not create config directory")
+
+                    # Copy OLS config files to temp and upload
+                    template_base = Path(__file__).parent.parent.parent / "templates" / "ols"
+
+                    for config_file in ["vhconf.conf.template", "configure-ols.sh"]:
+                        src = template_base / config_file
+                        if src.exists():
+                            temp_config = f"/tmp/{site_name}_{config_file}"
+                            shutil.copy(str(src), temp_config)
+                            ssh.upload_file(temp_config, f"{remote_dir}/config/ols/{config_file}")
+                            os.remove(temp_config)
+                        else:
+                            print_info(f"Warning: {config_file} not found in template")
+
+                    # Make configure script executable
+                    exit_code, _, _ = ssh.run_command(f"chmod +x {remote_dir}/config/ols/configure-ols.sh")
+
                 # Deploy containers
                 progress.update(task, description=f"Deploying {wp_type} containers...")
                 exit_code, stdout, stderr = ssh.run_command(
@@ -302,7 +337,7 @@ def create_site(
                         raise RuntimeError("Database initialization timeout")
 
                 # Wait for WordPress container
-                wp_container = f"{site_name}_wp" if wp_type == "frankenwp" else f"{site_name}_ols"
+                wp_container = f"{site_name}_wp" if wp_type in ["frankenwp", "wordpress"] else f"{site_name}_ols"
                 if not health_checker.wait_for_container(wp_container, timeout=60):
                     raise RuntimeError("WordPress container failed to start")
 
@@ -315,7 +350,7 @@ def create_site(
 
                 # Wait for WordPress files to be ready
                 progress.update(task, description="Waiting for WordPress files...")
-                wp_path = "/var/www/html" if wp_type == "frankenwp" else f"/var/www/vhosts/{domain}"
+                wp_path = "/var/www/html" if wp_type in ["frankenwp", "wordpress"] else f"/var/www/vhosts/{domain}"
                 wp_ready = False
                 for attempt in range(30):  # 30 seconds max
                     exit_code, _, _ = ssh.run_command(
@@ -328,7 +363,14 @@ def create_site(
                     time.sleep(1)
 
                 if not wp_ready:
-                    raise RuntimeError("WordPress files not ready after 30 seconds")
+                    print_info("Downloading WordPress core...")
+                    # Pass memory limit directly to PHP command
+                    exit_code, stdout, stderr = ssh.run_command(
+                        f"docker exec --user root {wpcli_container} php -d memory_limit=512M /usr/local/bin/wp core download --force --allow-root",
+                        timeout=300
+                    )
+                    if exit_code != 0:
+                        raise RuntimeError(f"Failed to download WordPress: {stderr}")
 
                 # Auto-install WordPress using WP-CLI
                 progress.update(task, description="Installing WordPress via WP-CLI...")
@@ -338,11 +380,16 @@ def create_site(
                     if not wp_manager.core_install(
                         container_name=wpcli_container,
                         site_config={
+                            'name': site_name,
                             'domain': domain,
                             'site_title': site_title,
                             'wp_admin_user': creds['wp_admin_user'],
                             'wp_admin_password': creds['wp_admin_password'],
-                            'wp_admin_email': admin_email
+                            'wp_admin_email': admin_email,
+                            'db_name': creds['db_name'],
+                            'db_user': creds['db_user'],
+                            'db_password': creds['db_password'],
+                            'db_host': 'vibewp_shared_db' if db_mode == 'shared' else ('mysql' if wp_type == 'ols' else 'db')
                         },
                         wp_type=wp_type
                     ):
@@ -394,7 +441,7 @@ def create_site(
 
         except Exception as e:
             print_error(f"Site creation failed: {e}")
-            rollback_site_creation(site_name, ssh, remote_dir)
+            # rollback_site_creation(site_name, ssh, remote_dir)
             raise typer.Exit(code=1)
 
         finally:
