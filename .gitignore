@@ -1,6 +1,7 @@
 .claude/
 .opencode/
 plans/
+docs/
 *.yaml
 !.vibewp-dev.yaml.example
 is_rsa_vibery_test*
