@@ -105,7 +105,10 @@ def create_site(
         admin_email = str(admin_email).strip()
 
         if not site_title or not isinstance(site_title, str):
-            site_title = typer.prompt("Site title", default=domain)
+            if yes:
+                site_title = domain  # Use domain as default when -y flag is set
+            else:
+                site_title = typer.prompt("Site title", default=domain)
         site_title = str(site_title).strip()
 
         # Handle db_mode: use flag if provided, otherwise use config default
@@ -762,6 +765,263 @@ def fix_permissions(
 
     except Exception as e:
         print_error(f"Error: {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command("migrate")
+def migrate_site(
+    site_name: str = typer.Argument(..., help="Site name to migrate"),
+    force: bool = typer.Option(False, "--force", help="Skip confirmation")
+):
+    """
+    Migrate old FrankenWP sites to new shinsenter/frankenphp image
+
+    This will:
+    - Update docker-compose.yml to use shinsenter/frankenphp:latest
+    - Add Caddyfile configuration
+    - Add SSL proxy detection to wp-config.php
+    - Restart containers with new image
+    """
+    try:
+        config_mgr = ConfigManager()
+        config_mgr.load_config()
+
+        site = config_mgr.get_site(site_name)
+        if not site:
+            print_error(f"Site '{site_name}' not found")
+            raise typer.Exit(code=1)
+
+        if site.type != "frankenwp":
+            print_error(f"Site '{site_name}' is not a FrankenWP site (type: {site.type})")
+            raise typer.Exit(code=1)
+
+        if not force:
+            print_info("\n⚠️  This will migrate your FrankenWP site:")
+            print_info("  • Update image from vibewp/frankenwp to shinsenter/frankenphp")
+            print_info("  • Add Caddyfile configuration")
+            print_info("  • Add SSL proxy detection to wp-config.php")
+            print_info("  • Restart containers (brief downtime)\n")
+
+            if not confirm("Continue with migration?", default=True):
+                print_info("Migration cancelled")
+                return
+
+        # Connect to VPS
+        ssh = SSHManager(
+            host=config_mgr.vps.host,
+            port=config_mgr.vps.port,
+            user=config_mgr.vps.user,
+            key_path=config_mgr.vps.key_path
+        )
+        ssh.connect()
+
+        try:
+            remote_dir = f"{config_mgr.docker.base_path}/sites/{site_name}"
+            wp_container = f"{site_name}_wp"
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                transient=True
+            ) as progress:
+                task = progress.add_task(description="Checking current image...", total=None)
+
+                # Check current image
+                exit_code, stdout, stderr = ssh.run_command(
+                    f"docker inspect {wp_container} --format '{{{{.Config.Image}}}}'",
+                    timeout=10
+                )
+                current_image = stdout.strip() if exit_code == 0 else "unknown"
+
+                if "shinsenter/frankenphp" in current_image:
+                    print_success(f"Site already uses shinsenter/frankenphp image")
+                    print_info("Checking for other migration steps...")
+
+                # Step 1: Backup docker-compose.yml
+                progress.update(task, description="Backing up docker-compose.yml...")
+                ssh.run_command(f"cp {remote_dir}/docker-compose.yml {remote_dir}/docker-compose.yml.bak", timeout=10)
+
+                # Step 2: Update docker-compose.yml
+                progress.update(task, description="Updating docker-compose.yml...")
+
+                # Read current compose file
+                exit_code, compose_content, stderr = ssh.run_command(
+                    f"cat {remote_dir}/docker-compose.yml",
+                    timeout=10
+                )
+
+                if exit_code != 0:
+                    raise RuntimeError(f"Failed to read docker-compose.yml: {stderr}")
+
+                # Replace old image with new
+                new_compose = compose_content.replace("vibewp/frankenwp:latest", "shinsenter/frankenphp:latest")
+                new_compose = new_compose.replace("vibewp/frankenwp", "shinsenter/frankenphp:latest")
+
+                # Add Caddyfile mount if not present
+                if "./Caddyfile:/etc/caddy/Caddyfile" not in new_compose:
+                    # Find wp_data volume line and add Caddyfile mount after it
+                    new_compose = new_compose.replace(
+                        "- wp_data:/var/www/html",
+                        "- wp_data:/var/www/html\n      - ./Caddyfile:/etc/caddy/Caddyfile:ro"
+                    )
+
+                # Fix wpcli user if needed (82:82 -> 33:33)
+                new_compose = new_compose.replace('user: "82:82"', 'user: "33:33"')
+
+                # Write updated compose file
+                temp_compose = f"/tmp/{site_name}_compose_migrate.yml"
+                with open(temp_compose, 'w') as f:
+                    f.write(new_compose)
+                ssh.upload_file(temp_compose, f"{remote_dir}/docker-compose.yml")
+                os.remove(temp_compose)
+
+                # Step 3: Create Caddyfile if not exists
+                progress.update(task, description="Creating Caddyfile...")
+                exit_code, _, _ = ssh.run_command(f"test -f {remote_dir}/Caddyfile", timeout=5)
+
+                if exit_code != 0:
+                    # Caddyfile doesn't exist, create it
+                    from pathlib import Path
+                    import shutil
+
+                    template_base = Path(__file__).parent.parent.parent / "templates" / "frankenwp"
+                    caddyfile_src = template_base / "Caddyfile"
+
+                    if caddyfile_src.exists():
+                        temp_caddyfile = f"/tmp/{site_name}_Caddyfile_migrate"
+                        shutil.copy(str(caddyfile_src), temp_caddyfile)
+                        ssh.upload_file(temp_caddyfile, f"{remote_dir}/Caddyfile")
+                        os.remove(temp_caddyfile)
+                    else:
+                        caddyfile_content = """{
+    frankenphp
+    order php_server before file_server
+    auto_https off
+}
+
+:80 {
+    root * /var/www/html
+    encode gzip
+    php_server
+}"""
+                        ssh.run_command(f"cat > {remote_dir}/Caddyfile << 'CADDYEOF'\n{caddyfile_content}\nCADDYEOF")
+
+                # Step 4: Add SSL proxy detection to wp-config.php
+                progress.update(task, description="Adding SSL proxy detection...")
+                ssl_check_cmd = f'''docker exec {wp_container} grep -q "HTTP_X_FORWARDED_PROTO" /var/www/html/wp-config.php'''
+                exit_code, _, _ = ssh.run_command(ssl_check_cmd, timeout=10)
+
+                if exit_code != 0:
+                    # SSL detection not present, add it
+                    ssl_fix_cmd = f'''docker exec -u root {wp_container} php -r "
+                        \\$f = '/var/www/html/wp-config.php';
+                        \\$c = file_get_contents(\\$f);
+                        \\$ssl = \\"\\n// Force HTTPS behind reverse proxy\\nif (isset(\\\\\\$_SERVER['HTTP_X_FORWARDED_PROTO']) && \\\\\\$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {{\\n    \\\\\\$_SERVER['HTTPS'] = 'on';\\n}}\\n\\";
+                        \\$c = str_replace('<?php', '<?php' . \\$ssl, \\$c);
+                        file_put_contents(\\$f, \\$c);
+                    "'''
+                    ssh.run_command(ssl_fix_cmd, timeout=30)
+
+                # Step 5: Pull new image and restart containers
+                progress.update(task, description="Pulling new image...")
+                ssh.run_command("docker pull shinsenter/frankenphp:latest", timeout=300)
+
+                progress.update(task, description="Restarting containers...")
+                exit_code, stdout, stderr = ssh.run_command(
+                    f"cd {remote_dir} && docker compose down && docker compose up -d",
+                    timeout=120
+                )
+
+                if exit_code != 0:
+                    raise RuntimeError(f"Failed to restart containers: {stderr}")
+
+                # Step 6: Wait and verify
+                progress.update(task, description="Verifying migration...")
+                time.sleep(5)
+
+                exit_code, new_image, _ = ssh.run_command(
+                    f"docker inspect {wp_container} --format '{{{{.Config.Image}}}}'",
+                    timeout=10
+                )
+
+            # Success summary
+            console.print()
+            console.print(Panel.fit(
+                f"[bold green]Migration Completed![/bold green]\n\n"
+                f"[bold]Site:[/bold] {site_name}\n"
+                f"[bold]Domain:[/bold] {site.domain}\n"
+                f"[bold]New Image:[/bold] {new_image.strip() if exit_code == 0 else 'shinsenter/frankenphp:latest'}\n\n"
+                f"[green]✓ docker-compose.yml updated[/green]\n"
+                f"[green]✓ Caddyfile created[/green]\n"
+                f"[green]✓ SSL proxy detection added[/green]\n"
+                f"[green]✓ Containers restarted[/green]\n\n"
+                f"[cyan]Test your site:[/cyan] https://{site.domain}",
+                title="VibeWP Migration",
+                border_style="green"
+            ))
+
+        finally:
+            ssh.disconnect()
+
+    except Exception as e:
+        print_error(f"Migration failed: {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command("migrate-all")
+def migrate_all_sites(
+    force: bool = typer.Option(False, "--force", help="Skip confirmation")
+):
+    """
+    Migrate all FrankenWP sites to new shinsenter/frankenphp image
+
+    Batch migration for all sites using the old vibewp/frankenwp image.
+    """
+    try:
+        config_mgr = ConfigManager()
+        config_mgr.load_config()
+
+        # Find all FrankenWP sites
+        sites = config_mgr.get_sites()
+        frankenwp_sites = [s for s in sites if s.type == "frankenwp"]
+
+        if not frankenwp_sites:
+            print_info("No FrankenWP sites found to migrate")
+            return
+
+        print_info(f"\nFound {len(frankenwp_sites)} FrankenWP site(s) to migrate:")
+        for site in frankenwp_sites:
+            print_info(f"  • {site.name} ({site.domain})")
+
+        if not force:
+            console.print()
+            if not confirm(f"Migrate all {len(frankenwp_sites)} sites?", default=True):
+                print_info("Migration cancelled")
+                return
+
+        # Migrate each site
+        success_count = 0
+        fail_count = 0
+
+        for site in frankenwp_sites:
+            console.print(f"\n[bold cyan]Migrating {site.name}...[/bold cyan]")
+            try:
+                # Call migrate command programmatically
+                migrate_site(site_name=site.name, force=True)
+                success_count += 1
+            except Exception as e:
+                print_error(f"Failed to migrate {site.name}: {e}")
+                fail_count += 1
+
+        # Summary
+        console.print()
+        if fail_count == 0:
+            print_success(f"All {success_count} sites migrated successfully!")
+        else:
+            print_warning(f"Migrated {success_count} sites, {fail_count} failed")
+
+    except Exception as e:
+        print_error(f"Migration failed: {e}")
         raise typer.Exit(code=1)
 
 

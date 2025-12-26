@@ -1,6 +1,6 @@
 # VibeWP - VPS WordPress Manager
 
-**Version**: 1.6.2 | CLI tool for managing WordPress sites on VPS with automatic HTTPS, Docker isolation, and security auditing.
+**Version**: 1.7.0 | CLI tool for managing WordPress sites on VPS with automatic HTTPS, Docker isolation, and security auditing.
 
 ## Quick Start
 
@@ -26,7 +26,7 @@ Fully automated! Generates secure credentials, installs WordPress, sets up HTTPS
 
 - **One-command site creation** (<5 minutes with auto-HTTPS)
 - **Multi-site management** (unlimited sites per VPS)
-- **Dual engines** (FrankenWP for speed, OpenLiteSpeed for stability)
+- **Three engines** (FrankenWP, WordPress Official, OpenLiteSpeed)
 - **Automatic HTTPS** (Let's Encrypt via Caddy)
 - **Security auditing** (system + WordPress + CVE scanning)
 - **SFTP access** (chroot jails, wp-content only)
@@ -44,6 +44,8 @@ vibewp site start|stop|restart <name> # Control sites
 vibewp site delete <name>             # Remove site
 vibewp site fix-permissions <name>    # Fix permission issues
 vibewp site reinstall-core <name>     # Recover from hack
+vibewp site migrate <name>            # Migrate to new FrankenPHP image
+vibewp site migrate-all               # Batch migrate all FrankenWP sites
 ```
 
 ### Domain Management
@@ -89,8 +91,9 @@ vibewp menu                            # Interactive menu
 Internet (80/443)
     ↓
 Caddy Reverse Proxy (auto-HTTPS)
-    ├── FrankenWP Sites (FrankenPHP + MariaDB 11)
-    └── OpenLiteSpeed Sites (OLS + Redis + MariaDB 11)
+    ├── FrankenWP Sites (shinsenter/frankenphp + MariaDB)
+    ├── WordPress Sites (wordpress:latest + MariaDB)
+    └── OpenLiteSpeed Sites (OLS + Redis + MariaDB)
 ```
 
 Each site runs in isolated Docker network with separate database, filesystem, and network access.
