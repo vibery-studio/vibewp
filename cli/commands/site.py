@@ -66,6 +66,19 @@ def create_site(
         config_mgr = ConfigManager()
         config_mgr.load_config()
 
+        # Show server IP hint for DNS setup
+        server_ip = config_mgr.vps.host
+        if server_ip and server_ip != "localhost":
+            console.print(Panel.fit(
+                f"[bold yellow]⚠️  DNS Setup Required[/bold yellow]\n\n"
+                f"Before creating the site, ensure your domain's DNS\n"
+                f"A record points to this server:\n\n"
+                f"[bold cyan]Server IP: {server_ip}[/bold cyan]\n\n"
+                f"[dim]DNS changes may take up to 24-48 hours to propagate.[/dim]",
+                title="DNS Configuration",
+                border_style="yellow"
+            ))
+
         # Interactive prompts if not provided
         # Handle both None and OptionInfo objects from typer
         if not site_name or not isinstance(site_name, str):
